@@ -16,6 +16,16 @@ public class MyAi implements Ai {
 
 	@Nonnull @Override public String name() { return "Damien & Patrik's MrX"; }
 
+	@Override
+	public void onStart() {
+		Ai.super.onStart();
+	}
+
+	@Override
+	public void onTerminate() {
+		Ai.super.onTerminate();
+	}
+
 	@Nonnull @Override public Move pickMove(
 			@Nonnull Board board,
 			Pair<Long, TimeUnit> timeoutPair) {
