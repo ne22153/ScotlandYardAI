@@ -29,8 +29,15 @@ public class MyAi implements Ai {
 	@Nonnull @Override public Move pickMove(
 			@Nonnull Board board,
 			Pair<Long, TimeUnit> timeoutPair) {
-		// returns a random move, replace with your own implementation
-		var moves = board.getAvailableMoves().asList();
-		return moves.get(new Random().nextInt(moves.size()));
+		// iterate through MrX's possible moves (will be stored in .availableMoves() when it is his turn)
+
+		// for each move, iterate through the detectives and find the distance between the move's destination and that det
+
+		// for that move, select the detective with the shortest distance
+
+		// after iteration, pick the move with the longest 'minimal' distance
+
+
+		return null;
 	}
 }
