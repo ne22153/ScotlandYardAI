@@ -2,7 +2,6 @@ package uk.ac.bris.cs.scotlandyard.ui.ai;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
@@ -18,8 +17,7 @@ public class MyAi implements Ai {
 	private boolean ticketmaster(Piece det, ImmutableSet<ScotlandYard.Transport> transport, Board board){
 		// check to see if the given piece has a ticket that allows them to move in this direction
 		for(ScotlandYard.Transport t : transport){
-			// need to use t.requiredTicket()
-			Board.TicketBoard tickets = null;
+			Board.TicketBoard tickets;
 			if(board.getPlayerTickets(det).isPresent()){
 				tickets = board.getPlayerTickets(det).get();
 				if(tickets.getCount(t.requiredTicket()) > 0){
@@ -29,12 +27,12 @@ public class MyAi implements Ai {
 		}
 		return false;
 	}
-	@Nonnull private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board, Move move){
-		PriorityQueue<Integer> pq = new PriorityQueue<>();
+	@Nonnull private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
+		//PriorityQueue<Integer> pq = new PriorityQueue<>();
 		// get the detective's location
 		int source = 0;
 		if(board.getDetectiveLocation(detective).isPresent()){
-			source = board.getDetectiveLocation((Piece.Detective) detective).get();
+			source = board.getDetectiveLocation(detective).get();
 		}
 		// adjacent nodes to the detective's current location
 		//Set<Integer> nodes = board.getSetup().graph.adjacentNodes(source);
@@ -78,30 +76,26 @@ public class MyAi implements Ai {
 			}
 			visited.set(index, Boolean.TRUE);
 			Set<Integer> successors = board.getSetup().graph.successors(currentNode);
-			Iterator<Integer> successIterator = successors.iterator();
 			// go through successors to assess weights
-			while(successIterator.hasNext()){
-				AtomicInteger weight = new AtomicInteger();
-				Integer successor = successIterator.next();
-				Iterator<Integer>nodesIterator2 = nodes.iterator();
+			for (Integer successor : successors) {
+				Iterator<Integer> nodesIterator2 = nodes.iterator();
 				int count = 0;
-				while(nodesIterator2.hasNext()){
-					if(successor.equals(nodesIterator2.next())){
+				while (nodesIterator2.hasNext()) {
+					if (successor.equals(nodesIterator2.next())) {
 						break;
 					} else {
 						count++;
 					}
 				}
 				// need to change this section for transport types
-				//board.getSetup().graph.edgeValue(currentNode, successor).ifPresent(weight::set);
-				if(ticketmaster(detective, board.getSetup().graph.edgeValue(currentNode, successor).get(), board)) {
+				if (ticketmaster(detective, board.getSetup().graph.edgeValue(currentNode, successor).get(), board)) {
 					if ((dist.get(index) + 1) < dist.get(count)) {
 						dist.set(count, (dist.get(index) + 1));
 					}
 				}
 			}
 		}
-
+		//System.out.println(dist.get(destination));
 		return dist.get(destination-1);
 	}
 
@@ -123,43 +117,61 @@ public class MyAi implements Ai {
 		// iterate through MrX's possible moves (will be stored in .availableMoves() when it is his turn)
 		ImmutableSet<Move> mrXMoves = board.getAvailableMoves();
 		Iterator<Move> mrXIterator = mrXMoves.iterator();
-		int weight = Integer.MAX_VALUE;
-		int newWeight = 0;
-		Move currentMove = null;
+		int newWeight;
 		int moveWeights = 0;
-		Move newMove = null;
+		Move currentMove = null;
+		Move newMove;
 		while(mrXIterator.hasNext()) {
+			int weight = Integer.MAX_VALUE;
+			moveWeights = 0;
 			newMove = mrXIterator.next();
+			if(!newMove.accept(new Move.Visitor<ScotlandYard.Ticket>() {
+				@Override
+				public ScotlandYard.Ticket visit(Move.SingleMove move) {
+					return move.ticket;
+				}
 
-			// for each move, iterate through the detectives and find the distance between the move's destination and that det
-			for (Piece det : board.getPlayers()) {
-				if(det.isDetective()) {
-					newWeight = shortestDistance(newMove.accept(new Move.Visitor<Integer>() {
-
-						@Override
-						public Integer visit(Move.SingleMove move) {
-							return move.destination;
-						}
-
-						@Override
-						public Integer visit(Move.DoubleMove move) {
-							return move.destination2;
-						}
-					}), (Piece.Detective) det, board, newMove);
-					// for that move, select the detective with the shortest distance
-					if (newWeight < weight) {
-						weight = newWeight;
+				@Override
+				public ScotlandYard.Ticket visit(Move.DoubleMove move) {
+					if(move.ticket1.equals(ScotlandYard.Ticket.SECRET)){
+						return move.ticket1;
+					} else {
+						return move.ticket2;
 					}
 				}
-			}
-			// after iteration, pick the move with the longest 'minimal' distance
-			if(weight > moveWeights){
-				moveWeights = weight;
-				currentMove = newMove;
+			}).equals(ScotlandYard.Ticket.SECRET)) {
+				//System.out.println(newMove);
+				// for each move, iterate through the detectives and find the distance between the move's destination and that det
+				for (Piece det : board.getPlayers()) {
+					if (det.isDetective()) {
+						newWeight = shortestDistance(newMove.accept(new Move.Visitor<Integer>() {
+
+							@Override
+							public Integer visit(Move.SingleMove move) {
+								return move.destination;
+							}
+
+							@Override
+							public Integer visit(Move.DoubleMove move) {
+								return move.destination2;
+							}
+						}), (Piece.Detective) det, board);
+						// for that move, select the detective with the shortest distance
+						if (newWeight < weight) {
+							weight = newWeight;
+						}
+					}
+				}
+				// after iteration, pick the move with the longest 'minimal' distance
+				if (weight > moveWeights) {
+					moveWeights = weight;
+					currentMove = newMove;
+				}
+				//System.out.println("Move: "+newMove + ", weight: " + newWeight);
 			}
 
 		}
-
+		System.out.println("Chosen move: " + currentMove + " with weight: " + moveWeights);
 
 		return Objects.requireNonNull(currentMove);
 	}
