@@ -123,7 +123,7 @@ public class MyAi implements Ai {
 		Move newMove;
 		while(mrXIterator.hasNext()) {
 			int weight = Integer.MAX_VALUE;
-			moveWeights = 0;
+			//moveWeights = 0;
 			newMove = mrXIterator.next();
 			if(!newMove.accept(new Move.Visitor<ScotlandYard.Ticket>() {
 				@Override
