@@ -119,7 +119,7 @@ public class MyAi implements Ai {
 		Iterator<Move> mrXIterator = mrXMoves.iterator();
 		int newWeight;
 		int moveWeights = 0;
-		Move currentMove = null;
+		List<Move> currentMove = new ArrayList<>();
 		Move newMove;
 		while(mrXIterator.hasNext()) {
 			int weight = Integer.MAX_VALUE;
@@ -165,14 +165,26 @@ public class MyAi implements Ai {
 				// after iteration, pick the move with the longest 'minimal' distance
 				if (weight > moveWeights) {
 					moveWeights = weight;
-					currentMove = newMove;
+					currentMove.removeAll(currentMove);
+					currentMove.add(newMove);
+				} else if (weight == moveWeights){
+					currentMove.add(newMove);
 				}
 				//System.out.println("Move: "+newMove + ", weight: " + newWeight);
 			}
 
 		}
-		System.out.println("Chosen move: " + currentMove + " with weight: " + moveWeights);
+		System.out.println("New move: ");
+		for(Move move : currentMove){
+			System.out.println("Chosen move: " + move + " with weight: " + moveWeights);
+		}
 
-		return Objects.requireNonNull(currentMove);
+		// need to add move choice based on ticket availability here
+
+		// current just chooses a random move of the best weight available
+		Random random = new Random();
+		int num = random.nextInt(currentMove.size());
+
+		return Objects.requireNonNull(currentMove.get(num));
 	}
 }
