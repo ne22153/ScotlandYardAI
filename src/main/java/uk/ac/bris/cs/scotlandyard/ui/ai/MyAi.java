@@ -123,7 +123,6 @@ public class MyAi implements Ai {
 		Move newMove;
 		while(mrXIterator.hasNext()) {
 			int weight = Integer.MAX_VALUE;
-			//moveWeights = 0;
 			newMove = mrXIterator.next();
 			if(!newMove.accept(new Move.Visitor<ScotlandYard.Ticket>() {
 				@Override
@@ -162,15 +161,24 @@ public class MyAi implements Ai {
 						}
 					}
 				}
+
+
+				int count = 0;
+				for (ScotlandYard.Ticket t : newMove.tickets()){
+					count += 1;
+				}
 				// after iteration, pick the move with the longest 'minimal' distance
 				if (weight > moveWeights) {
 					moveWeights = weight;
-					currentMove.removeAll(currentMove);
+					currentMove.clear(); // Emptying list
 					currentMove.add(newMove);
 				} else if (weight == moveWeights){
-					currentMove.add(newMove);
+					if (count != 2 && !(weight < 2) ) {
+						currentMove.add(newMove);
+					}
 				}
 				//System.out.println("Move: "+newMove + ", weight: " + newWeight);
+				System.out.println("Moves: " +currentMove);
 			}
 
 		}
