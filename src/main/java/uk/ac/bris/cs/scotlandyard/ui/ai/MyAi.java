@@ -167,19 +167,21 @@ public class MyAi implements Ai {
 
 				int count = 0;
 				for (ScotlandYard.Ticket t : newMove.tickets()){
-					count += 1;
+					if(t.equals(ScotlandYard.Ticket.DOUBLE)){
+						count+=1;
+					}
 				}
 				// after iteration, pick the move with the longest 'minimal' distance
 				if(weight > moveWeights){
 					// removes the double moves from the rotation, as they should be saved for when necessary
-					if(count != 3) {
+					if(count != 1) {
 						// this doesn't seem to update sometimes, so the selected moves don't fit 
 						moveWeights = weight;
 						currentMove.clear(); // Emptying list
 						currentMove.add(newMove);
 					}
 				} else if (weight == moveWeights){
-					if (count != 3) {
+					if (count != 1) {
 						currentMove.add(newMove);
 					}
 				}
@@ -197,10 +199,11 @@ public class MyAi implements Ai {
 		}
 		// assuming the list has multiple elements...
 		// now we need to do some checks to find the best one for the situation:
-			// we want to weight the moves based on how many of the required ticket(s) we have
-			// if MrX is in a corner area (need to define this), then he should prioritise a move which heads to the centre
+			// we want to weight the moves based on how many of the required ticket(s) we have DONE
+			// if MrX is in a corner area (need to define this), then he should prioritise a move which heads to the centre DONE
 			// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
 			// only play double moves if they're the only ones available
+
 		// a list of pairs containing how many of the required ticket MrX has, and the move itself
 		List<Pair<Integer, Move>> ticketWeighted = new ArrayList<>();
 		for(Move move : currentMove){
@@ -218,6 +221,27 @@ public class MyAi implements Ai {
 				}
 			}), move));
 		}
+		// if MrX is in a corner area, weight the move which leads towards the centre
+		// define a corner by a node which has <= 2 adjacent nodes
+
+		for(Pair<Integer, Move> move : ticketWeighted){
+			if(board.getSetup().graph.adjacentNodes(move.right().accept(new Move.Visitor<Integer>() {
+				@Override
+				public Integer visit(Move.SingleMove move) {
+					return move.destination;
+				}
+
+				@Override
+				public Integer visit(Move.DoubleMove move) {
+					return move.destination2;
+				}
+			})).size() <= 2){
+				// if the move is in the corner, then it's score should be lowered
+				ticketWeighted.remove(move);
+				ticketWeighted.add(new Pair<>(move.left()-2, move.right()));
+			}
+		}
+
 		Pair<Integer, Move> maxNum = new Pair<>(0, currentMove.get(0));
 		for(Pair<Integer, Move> move : ticketWeighted){
 			// if the player has more of one kind of ticket, then it should be picked
