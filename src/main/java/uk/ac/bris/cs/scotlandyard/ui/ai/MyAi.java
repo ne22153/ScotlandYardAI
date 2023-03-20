@@ -11,6 +11,8 @@ import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
 
 import static com.google.common.collect.Iterables.size;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 public class MyAi implements Ai {
 
@@ -117,7 +119,7 @@ public class MyAi implements Ai {
 		// iterate through MrX's possible moves (will be stored in .availableMoves() when it is his turn)
 		ImmutableSet<Move> mrXMoves = board.getAvailableMoves();
 		Iterator<Move> mrXIterator = mrXMoves.iterator();
-		int newWeight;
+		int newWeight = 0;
 		int moveWeights = 0;
 		List<Move> currentMove = new ArrayList<>();
 		Move newMove;
@@ -168,31 +170,64 @@ public class MyAi implements Ai {
 					count += 1;
 				}
 				// after iteration, pick the move with the longest 'minimal' distance
-				if (weight > moveWeights) {
-					moveWeights = weight;
-					currentMove.clear(); // Emptying list
-					currentMove.add(newMove);
+				if(weight > moveWeights){
+					// removes the double moves from the rotation, as they should be saved for when necessary
+					if(count != 3) {
+						// this doesn't seem to update sometimes, so the selected moves don't fit 
+						moveWeights = weight;
+						currentMove.clear(); // Emptying list
+						currentMove.add(newMove);
+					}
 				} else if (weight == moveWeights){
-					if (count != 2 && !(weight < 2) ) {
+					if (count != 3) {
 						currentMove.add(newMove);
 					}
 				}
-				//System.out.println("Move: "+newMove + ", weight: " + newWeight);
-				System.out.println("Moves: " +currentMove);
+
+				System.out.println("Move: "+newMove + ", weight: " + newWeight);
+				//System.out.println("Moves: " +currentMove);
 			}
 
 		}
-		System.out.println("New move: ");
-		for(Move move : currentMove){
-			System.out.println("Chosen move: " + move + " with weight: " + moveWeights);
+		System.out.println(moveWeights);
+		// we now have a list of available moves that maximise the detective distance (currentMove)
+		if (currentMove.size() == 1){
+			System.out.println("only 1 available move, "+currentMove);
+			return currentMove.get(0);
 		}
+		// assuming the list has multiple elements...
+		// now we need to do some checks to find the best one for the situation:
+			// we want to weight the moves based on how many of the required ticket(s) we have
+			// if MrX is in a corner area (need to define this), then he should prioritise a move which heads to the centre
+			// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
+			// only play double moves if they're the only ones available
+		// a list of pairs containing how many of the required ticket MrX has, and the move itself
+		List<Pair<Integer, Move>> ticketWeighted = new ArrayList<>();
+		for(Move move : currentMove){
+			ticketWeighted.add(new Pair<>(move.accept(new Move.Visitor<Integer>() {
+				// using visitor pattern to find how many of the wanted ticket are available
+				@Override
+				public Integer visit(Move.SingleMove move) {
+					return board.getPlayerTickets(move.commencedBy()).get().getCount(move.ticket);
+				}
 
-		// need to add move choice based on ticket availability here
+				@Override
+				public Integer visit(Move.DoubleMove move) {
+					Board.TicketBoard tickets = board.getPlayerTickets(move.commencedBy()).get();
+					return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
+				}
+			}), move));
+		}
+		Pair<Integer, Move> maxNum = new Pair<>(0, currentMove.get(0));
+		for(Pair<Integer, Move> move : ticketWeighted){
+			// if the player has more of one kind of ticket, then it should be picked
+			if(move.left() >= maxNum.left()){
+				maxNum = move;
+			}
+		}
+		System.out.println("Moves weighted: "+ticketWeighted);
 
-		// current just chooses a random move of the best weight available
-		Random random = new Random();
-		int num = random.nextInt(currentMove.size());
 
-		return Objects.requireNonNull(currentMove.get(num));
+		return Objects.requireNonNull(maxNum.right());
 	}
 }
