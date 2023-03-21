@@ -207,34 +207,6 @@ public class MyAi implements Ai {
 			// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
 			// only play double moves if they're the only ones available
 
-		// a list of pairs containing how many of the required ticket MrX has, and the move itself
-
-		/*Map<String, Integer> words = new HashMap<>();
-			words.put("hello", 3);
-			words.put("world", 4);
-			words.computeIfPresent("hello", (k, v) -> v + 1);
-			System.out.println(words.get("hello"));
-			*/
-		/*
-		List<Pair<Integer, Move>> ticketWeighted = new ArrayList<>();
-		for(Move move : currentMove){
-			ticketWeighted.add(new Pair<>(move.accept(new Move.Visitor<Integer>() {
-				// using visitor pattern to find how many of the wanted ticket are available
-				@Override
-				public Integer visit(Move.SingleMove move) {
-					return board.getPlayerTickets(move.commencedBy()).get().getCount(move.ticket);
-				}
-
-				@Override
-				public Integer visit(Move.DoubleMove move) {
-					Board.TicketBoard tickets = board.getPlayerTickets(move.commencedBy()).get();
-					return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
-				}
-			}), move));
-		}
-		*/
-
-		List<Map<Move,Integer>> ticketWeighted = new ArrayList<>();
 		Map<Move,Integer> weightedMove = new HashMap<>();
 		for(Move move : currentMove){
 			weightedMove.clear();
@@ -252,15 +224,14 @@ public class MyAi implements Ai {
 				}
 			}));
 			weightedMove.put(move,moveInt);
-			ticketWeighted.add(weightedMove);
+			//ticketWeighted.add(weightedMove);
 		}
 		// if MrX is in a corner area, weight the move which leads towards the centre
 		// define a corner by a node which has <= 2 adjacent nodes
 
 
 
-		for(Map<Move,Integer> moves : ticketWeighted){
-			for(Move move : moves.keySet()) {
+		for(Move move : weightedMove.keySet()){
 				if (board.getSetup().graph.adjacentNodes(move.accept(new Move.Visitor<Integer>() {
 					@Override
 					public Integer visit(Move.SingleMove move) {
@@ -273,23 +244,27 @@ public class MyAi implements Ai {
 					}
 				})).size() <= 2) {
 					// if the move is in the corner, then it's score should be lowered
-					moves.put(move,moves.get(move) - 2);
-				}
+					weightedMove.put(move, weightedMove.get(move)-2);
 			}
 		}
 
+		// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
+
+		// only play double moves if they're the only ones available
+
+		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
 		maxNum.put(currentMove.get(0),0);
-		for(Map<Move,Integer> moves : ticketWeighted){
+		Move maxNumMove = currentMove.get(0);
 			// if the player has more of one kind of ticket, then it should be picked
-			for (Move move : moves.keySet()) {
-				if (moves.get(move) >= (Integer) maxNum.keySet().toArray()[0]) {
+			for (Move move : weightedMove.keySet()) {
+				if (weightedMove.get(move) >= maxNum.get(maxNumMove)) {
 					maxNum.clear();
-					maxNum.put(move,moves.get(move));
+					maxNum.put(move,weightedMove.get(move));
+					maxNumMove = move;
 				}
 			}
-		}
-		System.out.println("Moves weighted: "+ticketWeighted);
+		System.out.println("Moves weighted: "+weightedMove);
 
 
 		return Objects.requireNonNull((Move)maxNum.keySet().toArray()[0]);
