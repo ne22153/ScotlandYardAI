@@ -18,6 +18,84 @@ import static java.lang.Math.*;
 
 public class MyAi implements Ai {
 
+	class TreeNode {
+		List<TreeNode> children;
+		Map<Integer, Integer> LocationAndScore;
+		Board state;
+		TreeNode(List<TreeNode> children, Map<Integer, Integer> LocationAndScore, Board state){
+			this.children = children;
+			this.LocationAndScore = LocationAndScore;
+			this.state = state;
+		}
+	}
+
+	// applies the scoring function for the given game state (currently finds the mean distance of MrX from all detectives)
+	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation){
+		int sumOf = 0;
+		for(Piece det : state.getPlayers()){
+			if(det.isDetective()){
+				sumOf += shortestDistance(MrXLocation, (Piece.Detective) det, state);
+			}
+		}
+		return (sumOf / (state.getPlayers().size()-1));
+	}
+
+	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
+		if(count == 0){return parentNode;}
+		// for each move available to the parent node
+		for (Move newMove : board.getAvailableMoves()) {
+			Map<Integer, Integer> destination = new HashMap<>();
+			destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
+			parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board.advance(newMove)));
+		}
+		for(TreeNode child : parentNode.children){
+			treeMaker(child, (Board.GameState) child.state, count-1);
+		}
+		return parentNode;
+	}
+
+	// sets up the tree for traversal
+	private TreeNode treeInitialiser(Board.GameState board){
+		Map<Integer, Integer> move = new HashMap<>();
+		move.put(board.getAvailableMoves().iterator().next().source(), 0);
+		TreeNode root = new TreeNode(new ArrayList<>(), move, board);
+		return treeMaker(root, board, 3);
+	}
+
+	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
+	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer){
+		if(depth == 0 || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+		if(maximisingPlayer){
+			Map<Integer, Integer> maxEval = new HashMap<>();
+			maxEval.put(0, -(Integer.MAX_VALUE));
+			for(TreeNode child : parentNode.children){
+				int eval = minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source());
+				if(maxEval.get(maxEval.keySet().iterator().next()) < eval){
+					maxEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+				}
+				alpha = max(alpha, eval);
+				if(beta <= alpha){
+					break;
+				}
+			}
+			return maxEval;
+		} else {
+			Map<Integer, Integer> minEval = new HashMap<>();
+			minEval.put(0, Integer.MAX_VALUE);
+			for(TreeNode child : parentNode.children){
+				int eval = minimax(child, depth -1, alpha, beta, true).get(child.state.getAvailableMoves().iterator().next().source());
+				if(minEval.get(minEval.keySet().iterator().next()) > eval){
+					minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+				}
+				beta = min(beta, eval);
+				if(beta <= alpha){
+					break;
+				}
+			}
+			return minEval;
+		}
+	}
+
 	private boolean ticketmaster(Piece det, ImmutableSet<ScotlandYard.Transport> transport, Board board){
 		// check to see if the given piece has a ticket that allows them to move in this direction
 		for(ScotlandYard.Transport t : transport){
@@ -114,7 +192,6 @@ public class MyAi implements Ai {
 				}
 			}
 		}
-		//System.out.println(dist.get(destination));
 		return dist.get(destination-1);
 	}
 
@@ -130,95 +207,9 @@ public class MyAi implements Ai {
 		Ai.super.onTerminate();
 	}
 
-	@Nonnull @Override public Move pickMove(
-			@Nonnull Board board,
-			Pair<Long, TimeUnit> timeoutPair) {
-		// iterate through MrX's possible moves (will be stored in .availableMoves() when it is his turn)
-		ImmutableSet<Move> mrXMoves = board.getAvailableMoves();
-		Iterator<Move> mrXIterator = mrXMoves.iterator();
-		int newWeight = 0;
-		int moveWeights = 0;
-		List<Move> currentMove = new ArrayList<>();
-		List<Move> doubleMoves = new ArrayList<>();
-		List<Move> secretMoves = new ArrayList<>();
-		Move newMove;
-		while(mrXIterator.hasNext()) {
-			int weight = Integer.MAX_VALUE;
-			newMove = mrXIterator.next();
-			if(!newMove.accept(new Move.Visitor<ScotlandYard.Ticket>() {
-				@Override
-				public ScotlandYard.Ticket visit(Move.SingleMove move) {
-					return move.ticket;
-				}
-
-				@Override
-				public ScotlandYard.Ticket visit(Move.DoubleMove move) {
-					if(move.ticket1.equals(ScotlandYard.Ticket.SECRET)){
-						return move.ticket1;
-					} else {
-						return move.ticket2;
-					}
-				}
-			}).equals(ScotlandYard.Ticket.SECRET)) {
-				//System.out.println(newMove);
-				// for each move, iterate through the detectives and find the distance between the move's destination and that det
-				for (Piece det : board.getPlayers()) {
-					if (det.isDetective()) {
-						newWeight = shortestDistance(getMoveDestination(newMove), (Piece.Detective) det, board);
-						// for that move, select the detective with the shortest distance
-						if (newWeight < weight) {
-							weight = newWeight;
-						}
-					}
-				}
-
-
-				int count = 0;
-				for (ScotlandYard.Ticket t : newMove.tickets()){
-					if(t.equals(ScotlandYard.Ticket.DOUBLE)){
-						count+=1;
-					}
-				}
-				// after iteration, pick the move with the longest 'minimal' distance
-				if(weight > moveWeights){
-					// removes the double moves from the rotation, as they should be saved for when necessary
-					if(count != 1) {
-						// this doesn't seem to update sometimes, so the selected moves don't fit 
-						moveWeights = weight;
-						currentMove.clear(); // Emptying list
-						currentMove.add(newMove);
-					} else {
-						doubleMoves.add(newMove);
-					}
-				} else if (weight == moveWeights){
-					if (count != 1) {
-						currentMove.add(newMove);
-					} else {
-						doubleMoves.add(newMove);
-					}
-				}
-
-				System.out.println("Move: "+newMove + ", weight: " + newWeight);
-				//System.out.println("Moves: " +currentMove);
-			} else {
-				secretMoves.add(newMove);
-			}
-
-		}
-		System.out.println(moveWeights);
-		// we now have a list of available moves that maximise the detective distance (currentMove)
-		if (currentMove.size() == 1){
-			System.out.println("only 1 available move, "+currentMove);
-			return currentMove.get(0);
-		}
-		// assuming the list has multiple elements...
-		// now we need to do some checks to find the best one for the situation:
-			// we want to weight the moves based on how many of the required ticket(s) we have DONE
-			// if MrX is in a corner area (need to define this), then he should prioritise a move which heads to the centre DONE
-			// only play double moves if they're the only ones available
-
+	private Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
 		Map<Move,Integer> weightedMove = new HashMap<>();
-		for(Move move : currentMove){
+		for(Move move : destinationMoves){
 			weightedMove.clear();
 			Integer moveInt = (move.accept(new Move.Visitor<Integer>() {
 				// using visitor pattern to find how many of the wanted ticket are available
@@ -234,51 +225,74 @@ public class MyAi implements Ai {
 				}
 			}));
 			weightedMove.put(move,moveInt);
-			//ticketWeighted.add(weightedMove);
 		}
+
 		// if MrX is in a corner area, weight the move which leads towards the centre
 		// define a corner by a node which has <= 2 adjacent nodes
-
-
-
 		for(Move move : weightedMove.keySet()){
-				if (board.getSetup().graph.adjacentNodes(getMoveDestination(move)).size() <= 2) {
-					// if the move is in the corner, then it's score should be lowered
-					weightedMove.put(move, weightedMove.get(move)-2);
+			if (board.getSetup().graph.adjacentNodes(getMoveDestination(move)).size() <= 2) {
+				// if the move is in the corner, then it's score should be lowered
+				weightedMove.put(move, weightedMove.get(move)-2);
 			}
 		}
 
-		// only play double moves if they're the only ones available
+		return weightedMove;
+	}
 
+	@Nonnull @Override public Move pickMove(
+			@Nonnull Board board,
+			Pair<Long, TimeUnit> timeoutPair) {
+
+		TreeNode tree = treeInitialiser((Board.GameState) board);
+		Map<Integer, Integer> bestMove = minimax(tree, 3, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true);
+		List<Move> destinationMoves = new ArrayList<>();
+		destinationMoves = board.getAvailableMoves().stream()
+				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
+				.toList();
+		Map<Move, Integer> weightedMove = ticketWeighting(board, destinationMoves);
 
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
-		maxNum.put(currentMove.get(0),0);
-		Move maxNumMove = currentMove.get(0);
-			// if the player has more of one kind of ticket, then it should be picked
-			for (Move move : weightedMove.keySet()) {
-				if (weightedMove.get(move) >= maxNum.get(maxNumMove)) {
-					maxNum.clear();
-					maxNum.put(move,weightedMove.get(move));
-					maxNumMove = move;
-				}
+		maxNum.put(destinationMoves.get(0),0);
+		Move maxNumMove = destinationMoves.get(0);
+		// if the player has more of one kind of ticket, then it should be picked
+		for (Move move : weightedMove.keySet()) {
+			if (weightedMove.get(move) >= maxNum.get(maxNumMove)) {
+				maxNum.clear();
+				maxNum.put(move,weightedMove.get(move));
+				maxNumMove = move;
 			}
+		}
 		System.out.println("Moves weighted: "+weightedMove);
 
 		// once a maxNum has been found, we should check if a secret card would be a better option
 		// if MrX's move was just a reveal, then play a secret card instead
 		List<Move> choosableSecrets = new ArrayList<>();
-		if(board.getSetup().moves.get(board.getMrXTravelLog().size()-1) && board.getMrXTravelLog().size() != 0){
-			for(Move move : secretMoves){
-				if(getMoveDestination(move).equals(getMoveDestination(maxNumMove))){
-					choosableSecrets.add(move);
+		if(board.getSetup().moves.get(board.getMrXTravelLog().size()-1) && board.getMrXTravelLog().size() != 0) {
+			for (Move move : destinationMoves) {
+				if (move.accept(new Move.Visitor<ScotlandYard.Ticket>() {
+					@Override
+					public ScotlandYard.Ticket visit(Move.SingleMove move) {
+						return move.ticket;
+					}
+
+					@Override
+					public ScotlandYard.Ticket visit(Move.DoubleMove move) {
+						if (move.ticket1.equals(ScotlandYard.Ticket.SECRET)) {
+							return move.ticket1;
+						} else {
+							return move.ticket2;
+						}
+					}
+				}).equals(ScotlandYard.Ticket.SECRET)) {
+					if (getMoveDestination(move).equals(getMoveDestination(maxNumMove))) {
+						choosableSecrets.add(move);
+					}
 				}
 			}
 			Random randomInt = new Random();
-			return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size()-1)));
+			return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 		}
-
-
 		return Objects.requireNonNull((Move)maxNum.keySet().toArray()[0]);
 	}
 }
