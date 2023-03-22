@@ -13,8 +13,7 @@ import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
 
 import static com.google.common.collect.Iterables.size;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
+import static java.lang.Math.*;
 
 
 public class MyAi implements Ai {
@@ -31,6 +30,21 @@ public class MyAi implements Ai {
 			}
 		}
 		return false;
+	}
+
+	@Nonnull private Integer getMoveDestination(Move move){
+		return move.accept(new Move.Visitor<Integer>() {
+
+			@Override
+			public Integer visit(Move.SingleMove move) {
+				return move.destination;
+			}
+
+			@Override
+			public Integer visit(Move.DoubleMove move) {
+				return move.destination2;
+			}
+		});
 	}
 	@Nonnull private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
 		//PriorityQueue<Integer> pq = new PriorityQueue<>();
@@ -125,6 +139,8 @@ public class MyAi implements Ai {
 		int newWeight = 0;
 		int moveWeights = 0;
 		List<Move> currentMove = new ArrayList<>();
+		List<Move> doubleMoves = new ArrayList<>();
+		List<Move> secretMoves = new ArrayList<>();
 		Move newMove;
 		while(mrXIterator.hasNext()) {
 			int weight = Integer.MAX_VALUE;
@@ -148,18 +164,7 @@ public class MyAi implements Ai {
 				// for each move, iterate through the detectives and find the distance between the move's destination and that det
 				for (Piece det : board.getPlayers()) {
 					if (det.isDetective()) {
-						newWeight = shortestDistance(newMove.accept(new Move.Visitor<Integer>() {
-
-							@Override
-							public Integer visit(Move.SingleMove move) {
-								return move.destination;
-							}
-
-							@Override
-							public Integer visit(Move.DoubleMove move) {
-								return move.destination2;
-							}
-						}), (Piece.Detective) det, board);
+						newWeight = shortestDistance(getMoveDestination(newMove), (Piece.Detective) det, board);
 						// for that move, select the detective with the shortest distance
 						if (newWeight < weight) {
 							weight = newWeight;
@@ -182,15 +187,21 @@ public class MyAi implements Ai {
 						moveWeights = weight;
 						currentMove.clear(); // Emptying list
 						currentMove.add(newMove);
+					} else {
+						doubleMoves.add(newMove);
 					}
 				} else if (weight == moveWeights){
 					if (count != 1) {
 						currentMove.add(newMove);
+					} else {
+						doubleMoves.add(newMove);
 					}
 				}
 
 				System.out.println("Move: "+newMove + ", weight: " + newWeight);
 				//System.out.println("Moves: " +currentMove);
+			} else {
+				secretMoves.add(newMove);
 			}
 
 		}
@@ -204,7 +215,6 @@ public class MyAi implements Ai {
 		// now we need to do some checks to find the best one for the situation:
 			// we want to weight the moves based on how many of the required ticket(s) we have DONE
 			// if MrX is in a corner area (need to define this), then he should prioritise a move which heads to the centre DONE
-			// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
 			// only play double moves if they're the only ones available
 
 		Map<Move,Integer> weightedMove = new HashMap<>();
@@ -232,25 +242,14 @@ public class MyAi implements Ai {
 
 
 		for(Move move : weightedMove.keySet()){
-				if (board.getSetup().graph.adjacentNodes(move.accept(new Move.Visitor<Integer>() {
-					@Override
-					public Integer visit(Move.SingleMove move) {
-						return move.destination;
-					}
-
-					@Override
-					public Integer visit(Move.DoubleMove move) {
-						return move.destination2;
-					}
-				})).size() <= 2) {
+				if (board.getSetup().graph.adjacentNodes(getMoveDestination(move)).size() <= 2) {
 					// if the move is in the corner, then it's score should be lowered
 					weightedMove.put(move, weightedMove.get(move)-2);
 			}
 		}
 
-		// if MrX is within a short distance of 79 or 7, then he should take the move which leads towards or away from it respectively
-
 		// only play double moves if they're the only ones available
+
 
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
@@ -265,6 +264,19 @@ public class MyAi implements Ai {
 				}
 			}
 		System.out.println("Moves weighted: "+weightedMove);
+
+		// once a maxNum has been found, we should check if a secret card would be a better option
+		// if MrX's move was just a reveal, then play a secret card instead
+		List<Move> choosableSecrets = new ArrayList<>();
+		if(board.getSetup().moves.get(board.getMrXTravelLog().size()-1) && board.getMrXTravelLog().size() != 0){
+			for(Move move : secretMoves){
+				if(getMoveDestination(move).equals(getMoveDestination(maxNumMove))){
+					choosableSecrets.add(move);
+				}
+			}
+			Random randomInt = new Random();
+			return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size()-1)));
+		}
 
 
 		return Objects.requireNonNull((Move)maxNum.keySet().toArray()[0]);
