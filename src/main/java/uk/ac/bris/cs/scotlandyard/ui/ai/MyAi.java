@@ -51,6 +51,7 @@ public class MyAi implements Ai {
 		for(TreeNode child : parentNode.children){
 			treeMaker(child, (Board.GameState) child.state, count-1);
 		}
+		System.out.println("Leaving children");
 		return parentNode;
 	}
 
@@ -59,12 +60,13 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
 		TreeNode root = new TreeNode(new ArrayList<>(), move, board);
-		return treeMaker(root, board, 3);
+		return treeMaker(root, board, 2);
 	}
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
 	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer){
 		if(depth == 0 || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+		System.out.println("minimax entered");
 		if(maximisingPlayer){
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, -(Integer.MAX_VALUE));
@@ -83,6 +85,7 @@ public class MyAi implements Ai {
 			Map<Integer, Integer> minEval = new HashMap<>();
 			minEval.put(0, Integer.MAX_VALUE);
 			for(TreeNode child : parentNode.children){
+				// this line returns null at some points, not sure how to rectify this
 				int eval = minimax(child, depth -1, alpha, beta, true).get(child.state.getAvailableMoves().iterator().next().source());
 				if(minEval.get(minEval.keySet().iterator().next()) > eval){
 					minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
@@ -244,7 +247,8 @@ public class MyAi implements Ai {
 			Pair<Long, TimeUnit> timeoutPair) {
 
 		TreeNode tree = treeInitialiser((Board.GameState) board);
-		Map<Integer, Integer> bestMove = minimax(tree, 3, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true);
+		System.out.println("Tree made");
+		Map<Integer, Integer> bestMove = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true);
 		List<Move> destinationMoves = new ArrayList<>();
 		destinationMoves = board.getAvailableMoves().stream()
 				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
