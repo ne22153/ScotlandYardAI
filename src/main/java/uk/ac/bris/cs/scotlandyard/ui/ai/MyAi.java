@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -21,8 +22,8 @@ public class MyAi implements Ai {
 	class TreeNode {
 		List<TreeNode> children;
 		Map<Integer, Integer> LocationAndScore;
-		Board state;
-		TreeNode(List<TreeNode> children, Map<Integer, Integer> LocationAndScore, Board state){
+		Board.GameState state;
+		TreeNode(List<TreeNode> children, Map<Integer, Integer> LocationAndScore, Board.GameState state){
 			this.children = children;
 			this.LocationAndScore = LocationAndScore;
 			this.state = state;
@@ -41,17 +42,53 @@ public class MyAi implements Ai {
 	}
 
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
-		if(count == 0){return parentNode;}
-		// for each move available to the parent node
-		for (Move newMove : board.getAvailableMoves()) {
-			Map<Integer, Integer> destination = new HashMap<>();
-			destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
-			parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board.advance(newMove)));
+		if(count == 0){
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, parentNode.LocationAndScore.keySet().iterator().next()));
+			return parentNode;
 		}
+		// if it's MrX's turn, then a new child should be made for each move
+		if(board.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().isMrX())){
+			// for each move available to the parent node
+			for (Move newMove : board.getAvailableMoves()) {
+				Map<Integer, Integer> destination = new HashMap<>();
+				destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
+				parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board.advance(newMove)));
+			}
+		} else {
+			// if it's the detective's turns, then a new child should be made for each combination of moves
+			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(w -> w.commencedBy()));
+			// add a new child for each possible move of the first detective
+			for(Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())){
+				Map<Integer, Integer> destination = new HashMap<>();
+				destination.put(0, 0);
+				//destination.put(getMoveDestination(move), stateEvaluation(board.advance(move), getMoveDestination(move)));
+				parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board));
+			}
+			// for all detectives, advance the board, and make new children for each move combination (order doesn't matter)
+
+			//for each detective
+			for(Piece det : groupedMoves.keySet()){
+				// for each of the current nodes
+				List<TreeNode> newChildren = new ArrayList<>();
+				for(TreeNode node : parentNode.children) {
+					// for each possible move of the current detective
+					for(Move move : groupedMoves.get(det)){
+						Map<Integer, Integer> destination = new HashMap<>();
+						//destination.put(getMoveDestination(move), stateEvaluation(node.state.advance(move), getMoveDestination(move)));
+						destination.put(getMoveDestination(move), stateEvaluation(node.state.advance(move), getMoveDestination(move)));
+						newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+					}
+				}
+				parentNode.children = newChildren;
+			}
+
+		}
+
 		for(TreeNode child : parentNode.children){
-			treeMaker(child, (Board.GameState) child.state, count-1);
+			System.out.println("Entering child");
+			treeMaker(child, child.state, count-1);
 		}
-		System.out.println("Leaving children");
+		System.out.println("Leaving child");
 		return parentNode;
 	}
 
@@ -70,29 +107,49 @@ public class MyAi implements Ai {
 		if(maximisingPlayer){
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, -(Integer.MAX_VALUE));
-			for(TreeNode child : parentNode.children){
-				int eval = minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source());
-				if(maxEval.get(maxEval.keySet().iterator().next()) < eval){
-					maxEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
-				}
-				alpha = max(alpha, eval);
-				if(beta <= alpha){
-					break;
+			if(!parentNode.children.isEmpty()) {
+				for (TreeNode child : parentNode.children) {
+					// testing print statement
+					System.out.println("Max: "+minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source()));
+
+					int eval = minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source());
+					if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
+						maxEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+					}
+					alpha = max(alpha, eval);
+					if (beta <= alpha) {
+						break;
+					}
 				}
 			}
 			return maxEval;
 		} else {
 			Map<Integer, Integer> minEval = new HashMap<>();
 			minEval.put(0, Integer.MAX_VALUE);
-			for(TreeNode child : parentNode.children){
-				// this line returns null at some points, not sure how to rectify this
-				int eval = minimax(child, depth -1, alpha, beta, true).get(child.state.getAvailableMoves().iterator().next().source());
-				if(minEval.get(minEval.keySet().iterator().next()) > eval){
-					minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
-				}
-				beta = min(beta, eval);
-				if(beta <= alpha){
-					break;
+			if(!parentNode.children.isEmpty()) {
+				for (TreeNode child : parentNode.children) {
+					// to find the last detective that is being used, by accessing the available moves
+					int location = 0;
+					int count = 0;
+					for(Move move : child.state.getAvailableMoves()){
+						count += 1;
+						if(count == child.state.getAvailableMoves().size()){
+							location = getMoveDestination(move);
+						}
+					}
+					System.out.println(minimax(child, depth - 1, alpha, beta, true).get(location));
+					// current problem line:
+					// the key is the location of the detective that was processed last in the tree creation stage
+					// this should be the last occurring detective after the moves are grouped by 'commencer'
+					// current issue is that when I try to find this, it returns null, and the debug will break before I can assess the eval variable
+					int eval = minimax(child, depth - 1, alpha, beta, true).get(location);
+					if (minEval.get(minEval.keySet().iterator().next()) > eval) {
+						minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+					}
+					beta = min(beta, eval);
+					if (beta <= alpha) {
+						break;
+					}
 				}
 			}
 			return minEval;
@@ -242,12 +299,20 @@ public class MyAi implements Ai {
 		return weightedMove;
 	}
 
+	private void printTree(TreeNode tree){
+		System.out.println("Node "+tree.LocationAndScore+" has children: ");
+		for(TreeNode child : tree.children){
+			printTree(child);
+		}
+	}
+
 	@Nonnull @Override public Move pickMove(
 			@Nonnull Board board,
 			Pair<Long, TimeUnit> timeoutPair) {
 
 		TreeNode tree = treeInitialiser((Board.GameState) board);
 		System.out.println("Tree made");
+		//printTree(tree);
 		Map<Integer, Integer> bestMove = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true);
 		List<Move> destinationMoves = new ArrayList<>();
 		destinationMoves = board.getAvailableMoves().stream()
