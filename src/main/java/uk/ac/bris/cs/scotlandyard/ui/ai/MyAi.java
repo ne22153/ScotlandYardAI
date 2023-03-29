@@ -10,6 +10,7 @@ import javax.annotation.Nonnull;
 
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.UnmodifiableIterator;
 import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
 
@@ -42,7 +43,7 @@ public class MyAi implements Ai {
 	}
 
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
-		if(count == 0){
+		if(count == -1){
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, parentNode.LocationAndScore.keySet().iterator().next()));
 			return parentNode;
 		}
@@ -51,8 +52,17 @@ public class MyAi implements Ai {
 			// for each move available to the parent node
 			for (Move newMove : board.getAvailableMoves()) {
 				Map<Integer, Integer> destination = new HashMap<>();
-				destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
-				parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board.advance(newMove)));
+				//destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
+				destination.put(getMoveDestination(newMove), 0);
+				int counter = 0;
+				for(TreeNode child : parentNode.children){
+					if(child.LocationAndScore.keySet().equals(destination.keySet())){
+						counter += 1;
+					}
+				}
+				if(counter == 0) {
+					parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board.advance(newMove)));
+				}
 			}
 		} else {
 			// if it's the detective's turns, then a new child should be made for each combination of moves
@@ -75,8 +85,17 @@ public class MyAi implements Ai {
 					for(Move move : groupedMoves.get(det)){
 						Map<Integer, Integer> destination = new HashMap<>();
 						//destination.put(getMoveDestination(move), stateEvaluation(node.state.advance(move), getMoveDestination(move)));
-						destination.put(getMoveDestination(move), stateEvaluation(node.state.advance(move), getMoveDestination(move)));
-						newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+						destination.put(getMoveDestination(move), 0);
+						int counter = 0;
+						for(TreeNode child : newChildren){
+							if(child.LocationAndScore.keySet().equals(destination.keySet())){
+								counter += 1;
+							}
+						}
+						if(counter == 0) {
+							newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+						}
+						//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 					}
 				}
 				parentNode.children = newChildren;
@@ -97,12 +116,12 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
 		TreeNode root = new TreeNode(new ArrayList<>(), move, board);
-		return treeMaker(root, board, 2);
+		return treeMaker(root, board, 1);
 	}
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
-	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer){
-		if(depth == 0 || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer, int count){
+		if(depth == -1 || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
 		System.out.println("minimax entered");
 		if(maximisingPlayer){
 			Map<Integer, Integer> maxEval = new HashMap<>();
@@ -110,9 +129,9 @@ public class MyAi implements Ai {
 			if(!parentNode.children.isEmpty()) {
 				for (TreeNode child : parentNode.children) {
 					// testing print statement
-					System.out.println("Max: "+minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source()));
-
-					int eval = minimax(child, depth - 1, alpha, beta, false).get(child.state.getAvailableMoves().iterator().next().source());
+					//System.out.println(child.state.getAvailableMoves().iterator().next().source());
+					//System.out.println("Max: "+minimax(child, depth - 1, alpha, beta, false));
+					int eval = minimax(child, depth - 1, alpha, beta, false, count).get(child.state.getAvailableMoves().iterator().next().source());
 					if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
 						maxEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
 					}
@@ -122,6 +141,7 @@ public class MyAi implements Ai {
 					}
 				}
 			}
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), maxEval.get(maxEval.keySet().iterator().next()));
 			return maxEval;
 		} else {
 			Map<Integer, Integer> minEval = new HashMap<>();
@@ -130,19 +150,28 @@ public class MyAi implements Ai {
 				for (TreeNode child : parentNode.children) {
 					// to find the last detective that is being used, by accessing the available moves
 					int location = 0;
-					int count = 0;
-					for(Move move : child.state.getAvailableMoves()){
+					//int count = 0;
+					/*for(Move move : parentNode.state.getAvailableMoves()){
 						count += 1;
-						if(count == child.state.getAvailableMoves().size()){
+						if(count == parentNode.state.getAvailableMoves().size()){
 							location = getMoveDestination(move);
+							//System.out.println(location);
 						}
+						System.out.println(getMoveDestination(move));
+					}*/
+					Iterator<Move> iterator = parentNode.state.getAvailableMoves().iterator();
+					for(int i = 0; i < count; i++){
+						iterator.next();
 					}
-					System.out.println(minimax(child, depth - 1, alpha, beta, true).get(location));
+					location = getMoveDestination(iterator.next());
+					//System.out.println(location);
+					//System.out.println(child.LocationAndScore.keySet().iterator().next());
+					//System.out.println(minimax(child, depth - 1, alpha, beta, true, count+1));
 					// current problem line:
 					// the key is the location of the detective that was processed last in the tree creation stage
 					// this should be the last occurring detective after the moves are grouped by 'commencer'
 					// current issue is that when I try to find this, it returns null, and the debug will break before I can assess the eval variable
-					int eval = minimax(child, depth - 1, alpha, beta, true).get(location);
+					int eval = minimax(child, depth - 1, alpha, beta, true, count+1).get(child.LocationAndScore.keySet().iterator().next());
 					if (minEval.get(minEval.keySet().iterator().next()) > eval) {
 						minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
 					}
@@ -152,6 +181,7 @@ public class MyAi implements Ai {
 					}
 				}
 			}
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), minEval.get(minEval.keySet().iterator().next()));
 			return minEval;
 		}
 	}
@@ -313,17 +343,23 @@ public class MyAi implements Ai {
 		TreeNode tree = treeInitialiser((Board.GameState) board);
 		System.out.println("Tree made");
 		//printTree(tree);
-		Map<Integer, Integer> bestMove = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true);
+		Map<Integer, Integer> bestMove = minimax(tree, 1, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
 		List<Move> destinationMoves = new ArrayList<>();
 		destinationMoves = board.getAvailableMoves().stream()
 				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
 				.toList();
 		Map<Move, Integer> weightedMove = ticketWeighting(board, destinationMoves);
-
+		System.out.println(weightedMove);
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
-		maxNum.put(destinationMoves.get(0),0);
-		Move maxNumMove = destinationMoves.get(0);
+		Move maxNumMove = null;
+		try {
+			maxNum.put(destinationMoves.get(0), 0);
+			maxNumMove = destinationMoves.get(0);
+		} catch (Exception e){
+			System.out.println("It's empty again");
+
+		}
 		// if the player has more of one kind of ticket, then it should be picked
 		for (Move move : weightedMove.keySet()) {
 			if (weightedMove.get(move) >= maxNum.get(maxNumMove)) {
@@ -337,30 +373,32 @@ public class MyAi implements Ai {
 		// once a maxNum has been found, we should check if a secret card would be a better option
 		// if MrX's move was just a reveal, then play a secret card instead
 		List<Move> choosableSecrets = new ArrayList<>();
-		if(board.getSetup().moves.get(board.getMrXTravelLog().size()-1) && board.getMrXTravelLog().size() != 0) {
-			for (Move move : destinationMoves) {
-				if (move.accept(new Move.Visitor<ScotlandYard.Ticket>() {
-					@Override
-					public ScotlandYard.Ticket visit(Move.SingleMove move) {
-						return move.ticket;
-					}
+		if(board.getMrXTravelLog().size() != 0) {
+			if (board.getSetup().moves.get(board.getMrXTravelLog().size() - 1)) {
+				for (Move move : destinationMoves) {
+					if (move.accept(new Move.Visitor<ScotlandYard.Ticket>() {
+						@Override
+						public ScotlandYard.Ticket visit(Move.SingleMove move) {
+							return move.ticket;
+						}
 
-					@Override
-					public ScotlandYard.Ticket visit(Move.DoubleMove move) {
-						if (move.ticket1.equals(ScotlandYard.Ticket.SECRET)) {
-							return move.ticket1;
-						} else {
-							return move.ticket2;
+						@Override
+						public ScotlandYard.Ticket visit(Move.DoubleMove move) {
+							if (move.ticket1.equals(ScotlandYard.Ticket.SECRET)) {
+								return move.ticket1;
+							} else {
+								return move.ticket2;
+							}
+						}
+					}).equals(ScotlandYard.Ticket.SECRET)) {
+						if (getMoveDestination(move).equals(getMoveDestination(maxNumMove))) {
+							choosableSecrets.add(move);
 						}
 					}
-				}).equals(ScotlandYard.Ticket.SECRET)) {
-					if (getMoveDestination(move).equals(getMoveDestination(maxNumMove))) {
-						choosableSecrets.add(move);
-					}
 				}
+				Random randomInt = new Random();
+				return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 			}
-			Random randomInt = new Random();
-			return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 		}
 		return Objects.requireNonNull((Move)maxNum.keySet().toArray()[0]);
 	}
