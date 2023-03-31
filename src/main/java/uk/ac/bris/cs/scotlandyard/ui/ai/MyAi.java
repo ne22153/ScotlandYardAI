@@ -44,7 +44,7 @@ public class MyAi implements Ai {
 
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
 		if(count == -1){
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, parentNode.LocationAndScore.keySet().iterator().next()));
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, (Integer) parentNode.LocationAndScore.keySet().iterator().next()));
 			return parentNode;
 		}
 		// if it's MrX's turn, then a new child should be made for each move
@@ -121,9 +121,10 @@ public class MyAi implements Ai {
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
 	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer, int count){
-		if(depth == -1 || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+		if(parentNode.children.isEmpty() || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
 		System.out.println("minimax entered");
 		if(maximisingPlayer){
+			System.out.println("In MrX");
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, -(Integer.MAX_VALUE));
 			if(!parentNode.children.isEmpty()) {
@@ -131,9 +132,14 @@ public class MyAi implements Ai {
 					// testing print statement
 					//System.out.println(child.state.getAvailableMoves().iterator().next().source());
 					//System.out.println("Max: "+minimax(child, depth - 1, alpha, beta, false));
-					int eval = minimax(child, depth - 1, alpha, beta, false, count).get(child.state.getAvailableMoves().iterator().next().source());
+					Integer loc = child.LocationAndScore.keySet().iterator().next();
+					Map<Integer,Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
+					System.out.println("MiniMax: "+blah);
+					System.out.println("Destination: "+loc);
+					int eval = blah.get(loc);
 					if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
-						maxEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+						maxEval.clear();
+						maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
 					}
 					alpha = max(alpha, eval);
 					if (beta <= alpha) {
@@ -141,12 +147,14 @@ public class MyAi implements Ai {
 					}
 				}
 			}
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), maxEval.get(maxEval.keySet().iterator().next()));
+			parentNode.LocationAndScore.replace((Integer) parentNode.LocationAndScore.keySet().iterator().next(), maxEval.get(maxEval.keySet().iterator().next()));
+			System.out.println("maxEval: "+maxEval);
 			return maxEval;
 		} else {
 			Map<Integer, Integer> minEval = new HashMap<>();
 			minEval.put(0, Integer.MAX_VALUE);
 			if(!parentNode.children.isEmpty()) {
+				System.out.println("In detectives");
 				for (TreeNode child : parentNode.children) {
 					// to find the last detective that is being used, by accessing the available moves
 					int location = 0;
@@ -164,17 +172,28 @@ public class MyAi implements Ai {
 						iterator.next();
 					}
 					location = getMoveDestination(iterator.next());
-					//System.out.println(location);
-					//System.out.println(child.LocationAndScore.keySet().iterator().next());
-					//System.out.println(minimax(child, depth - 1, alpha, beta, true, count+1));
+					System.out.println(location);
+					Integer loc = child.LocationAndScore.keySet().iterator().next();
+					Map<Integer,Integer> minimax = minimax(child, depth - 1, alpha, beta, true, count+1);
+					System.out.println("Minimax: "+ minimax);
+					System.out.println("Destination: "+loc);
 					// current problem line:
 					// the key is the location of the detective that was processed last in the tree creation stage
 					// this should be the last occurring detective after the moves are grouped by 'commencer'
 					// current issue is that when I try to find this, it returns null, and the debug will break before I can assess the eval variable
-					int eval = minimax(child, depth - 1, alpha, beta, true, count+1).get(child.LocationAndScore.keySet().iterator().next());
-					if (minEval.get(minEval.keySet().iterator().next()) > eval) {
-						minEval.replace(child.state.getAvailableMoves().iterator().next().source(), eval);
+					int eval = minimax.get(loc);
+					int minEvalVal = minEval.get(minEval.keySet().iterator().next());
+					System.out.println("Pre-comparison minEval "+minEval);
+					System.out.println("Eval "+eval);
+					System.out.println("minEvalVal: "+minEvalVal);
+					if (minEvalVal > eval) {
+						int source = child.state.getAvailableMoves().iterator().next().source();
+						System.out.println("Source: "+source);
+						System.out.println("Inside Eval "+eval);
+						minEval.clear();
+						minEval.put(source, eval);
 					}
+					System.out.println("Post-comparison minEval "+minEval);
 					beta = min(beta, eval);
 					if (beta <= alpha) {
 						break;
@@ -182,6 +201,8 @@ public class MyAi implements Ai {
 				}
 			}
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), minEval.get(minEval.keySet().iterator().next()));
+			System.out.println("Returning...");
+			System.out.println("End minEval "+minEval);
 			return minEval;
 		}
 	}
@@ -400,6 +421,6 @@ public class MyAi implements Ai {
 				return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 			}
 		}
-		return Objects.requireNonNull((Move)maxNum.keySet().toArray()[0]);
+		return Objects.requireNonNull(maxNum.keySet().iterator().next());
 	}
 }
