@@ -2,7 +2,6 @@ package uk.ac.bris.cs.scotlandyard.ui.ai;
 
 import java.util.*;
 import java.util.HashMap;
-import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -20,10 +19,11 @@ import static java.lang.Math.*;
 
 public class MyAi implements Ai {
 
-	class TreeNode {
+	static class TreeNode {
 		List<TreeNode> children;
 		Map<Integer, Integer> LocationAndScore;
 		Board.GameState state;
+
 		TreeNode(List<TreeNode> children, Map<Integer, Integer> LocationAndScore, Board.GameState state){
 			this.children = children;
 			this.LocationAndScore = LocationAndScore;
@@ -66,7 +66,7 @@ public class MyAi implements Ai {
 			}
 		} else {
 			// if it's the detective's turns, then a new child should be made for each combination of moves
-			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(w -> w.commencedBy()));
+			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
 			// add a new child for each possible move of the first detective
 			for(Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())){
 				Map<Integer, Integer> destination = new HashMap<>();
@@ -86,9 +86,12 @@ public class MyAi implements Ai {
 						int locationCheck = 0;
 						// runs a check to ensure the space isn't occupied
 						for(Piece detective : nodeCheck.getPlayers()){
-							if(detective.isDetective()){
-								if(node.state.getDetectiveLocation((Piece.Detective) detective).equals(getMoveDestination(move))){
-									locationCheck+=1;
+							if(detective.isDetective()) {
+								Optional<Integer> detLocation = node.state.getDetectiveLocation((Piece.Detective) detective);
+								if (detLocation.isPresent()) {
+									if ((detLocation.get()).equals(getMoveDestination(move))){
+										locationCheck += 1;
+									}
 								}
 							}
 						}
@@ -137,25 +140,19 @@ public class MyAi implements Ai {
 			System.out.println("In MrX");
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, -(Integer.MAX_VALUE));
-			if(!parentNode.children.isEmpty()) {
-				//System.out.println("Depth: "+depth+" , choices: "+parentNode.children);
-				for (TreeNode child : parentNode.children) {
-					// testing print statement
-					//System.out.println(child.state.getAvailableMoves().iterator().next().source());
-					//System.out.println("Max: "+minimax(child, depth - 1, alpha, beta, false));
-					Integer loc = child.LocationAndScore.keySet().iterator().next();
-					Map<Integer,Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
-					System.out.println("MiniMax: "+blah);
-					System.out.println("Destination: "+loc);
-					int eval = blah.get(loc);
-					if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
-						maxEval.clear();
-						maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
-					}
-					alpha = max(alpha, eval);
-					if (beta <= alpha) {
-						break;
-					}
+			if(!parentNode.children.isEmpty()) for (TreeNode child : parentNode.children) {
+				Integer loc = child.LocationAndScore.keySet().iterator().next();
+				Map<Integer, Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
+				System.out.println("MiniMax: " + blah);
+				System.out.println("Destination: " + loc);
+				int eval = blah.get(loc);
+				if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
+					maxEval.clear();
+					maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
+				}
+				alpha = max(alpha, eval);
+				if (beta <= alpha) {
+					break;
 				}
 			}
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), maxEval.get(maxEval.keySet().iterator().next()));
@@ -237,7 +234,8 @@ public class MyAi implements Ai {
 			}
 		});
 	}
-	@Nonnull private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
+
+	@Nonnull @SuppressWarnings("UnstableApiUsage") private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
 		//PriorityQueue<Integer> pq = new PriorityQueue<>();
 		// get the detective's location
 		int source = 0;
@@ -297,10 +295,13 @@ public class MyAi implements Ai {
 						count++;
 					}
 				}
+
 				// need to change this section for transport types
-				if (ticketmaster(detective, board.getSetup().graph.edgeValue(currentNode, successor).get(), board)) {
-					if ((dist.get(index) + 1) < dist.get(count)) {
-						dist.set(count, (dist.get(index) + 1));
+				if (board.getSetup().graph.edgeValue(currentNode, successor).isPresent()) {
+					if(ticketmaster(detective, board.getSetup().graph.edgeValue(currentNode, successor).get(), board)) {
+						if ((dist.get(index) + 1) < dist.get(count)) {
+							dist.set(count, (dist.get(index) + 1));
+						}
 					}
 				}
 			}
@@ -319,7 +320,7 @@ public class MyAi implements Ai {
 	public void onTerminate() {
 		Ai.super.onTerminate();
 	}
-
+	@SuppressWarnings("UnstableApiUsage")
 	private Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
 		Map<Move,Integer> weightedMove = new HashMap<>();
 		for(Move move : destinationMoves){
@@ -328,13 +329,30 @@ public class MyAi implements Ai {
 				// using visitor pattern to find how many of the wanted ticket are available
 				@Override
 				public Integer visit(Move.SingleMove move) {
-					return board.getPlayerTickets(move.commencedBy()).get().getCount(move.ticket);
+					try {
+						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
+						if (optTickets.isPresent()) {
+							Board.TicketBoard tickets = optTickets.get();
+							return tickets.getCount(move.ticket);
+						}
+					} catch (NullPointerException exception){
+						System.out.println("Ticket for move was not found!");
+					}
+					return null;
 				}
 
 				@Override
 				public Integer visit(Move.DoubleMove move) {
-					Board.TicketBoard tickets = board.getPlayerTickets(move.commencedBy()).get();
-					return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
+					try {
+						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
+						if (optTickets.isPresent()) {
+							Board.TicketBoard tickets = optTickets.get();
+							return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
+						}
+					} catch (NullPointerException exception){
+						System.out.println("Tickets for moves were not found!");
+					}
+					return null;
 				}
 			}));
 			weightedMove.put(move,moveInt);
@@ -352,6 +370,7 @@ public class MyAi implements Ai {
 		return weightedMove;
 	}
 
+	@SuppressWarnings("unused")
 	private void printTree(TreeNode tree){
 		System.out.println("Node "+tree.LocationAndScore+" has children: ");
 		for(TreeNode child : tree.children){
@@ -367,10 +386,10 @@ public class MyAi implements Ai {
 		}
 		Map<Integer, Integer> nodeFound = new HashMap<>();
 		for(TreeNode node : tree.children){
-			 nodeFound = treeSearch(node, weight, count+1);
-			 if(!nodeFound.isEmpty()){
-				 return  nodeFound;
-			 }
+			nodeFound = treeSearch(node, weight, count+1);
+			if(!nodeFound.isEmpty()){
+				return  nodeFound;
+			}
 		}
 		return nodeFound;
 	}
@@ -432,7 +451,7 @@ public class MyAi implements Ai {
 							}
 						}
 					}).equals(ScotlandYard.Ticket.SECRET)) {
-						if (getMoveDestination(move).equals(getMoveDestination(maxNumMove))) {
+						if (getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
 							choosableSecrets.add(move);
 						}
 					}
