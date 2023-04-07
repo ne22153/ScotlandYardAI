@@ -37,13 +37,26 @@ public class MyAi implements Ai {
 			System.out.println("Game over move");
 			return Integer.MIN_VALUE;
 		}
-		int sumOf = 0;
+		int score = 0;
+		int minDist = 0;
+		int count = 0;
 		for(Piece det : state.getPlayers()){
-			if(det.isDetective()){
-				sumOf += shortestDistance(MrXLocation, (Piece.Detective) det, state);
+			if(det.isDetective()) {
+				int newDist = shortestDistance(MrXLocation, (Piece.Detective) det, state);
+				if(newDist <= 3){
+					score += newDist;
+					count += 1;
+				}
+				if (newDist >= minDist){
+					minDist = newDist;
+				}
 			}
 		}
-		return (sumOf / (state.getPlayers().size()-1));
+		if (score == 0){
+			score = minDist;
+		}
+		else { score = score/count;}
+		return score;
 	}
 
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
@@ -410,7 +423,7 @@ public class MyAi implements Ai {
 		Map<Move,Integer> maxNum = new HashMap<>();
 		Move maxNumMove = null;
 		try {
-			maxNum.put(destinationMoves.get(0), 0);
+			maxNum.put(destinationMoves.get(0), 1);
 			maxNumMove = destinationMoves.get(0);
 		} catch (Exception e){
 			System.out.println("It's empty again");
