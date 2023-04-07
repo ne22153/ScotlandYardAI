@@ -32,7 +32,11 @@ public class MyAi implements Ai {
 	}
 
 	// applies the scoring function for the given game state (currently finds the mean distance of MrX from all detectives)
-	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation){
+	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation, Map<Integer, Integer> currentScore){
+		if(currentScore.get(currentScore.keySet().iterator().next()) == Integer.MIN_VALUE){
+			System.out.println("Game over move");
+			return Integer.MIN_VALUE;
+		}
 		int sumOf = 0;
 		for(Piece det : state.getPlayers()){
 			if(det.isDetective()){
@@ -44,7 +48,8 @@ public class MyAi implements Ai {
 
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
 		if(count == -1){
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, (Integer) parentNode.LocationAndScore.keySet().iterator().next()));
+			System.out.println("MrX location: "+parentNode.LocationAndScore.keySet().iterator().next());
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, (Integer) parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
 			return parentNode;
 		}
 		// if it's MrX's turn, then a new child should be made for each move
@@ -68,62 +73,64 @@ public class MyAi implements Ai {
 			// if it's the detective's turns, then a new child should be made for each combination of moves
 			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
 			// add a new child for each possible move of the first detective
-			for(Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())){
-				Map<Integer, Integer> destination = new HashMap<>();
-				destination.put(0, 0);
-				//destination.put(getMoveDestination(move), stateEvaluation(board.advance(move), getMoveDestination(move)));
-				parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board));
-			}
-			// for all detectives, advance the board, and make new children for each move combination (order doesn't matter)
-			// changed, so it doesn't rely on the groupedMoves variable
-			for(Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()){
-				// for each of the current nodes
-				List<TreeNode> newChildren = new ArrayList<>();
-				for(TreeNode node : parentNode.children) {
-					Board.GameState nodeCheck = node.state;
-					groupedMoves = nodeCheck.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
-					// if groupedMoves is empty, that means the game is over, so no new children should be made from this node
-					if(!groupedMoves.isEmpty()) {
-						// for each possible move of the current detective
-						for (Move move : groupedMoves.get(det)) {
-							int locationCheck = 0;
-							// runs a check to ensure the space isn't occupied
-							for (Piece detective : nodeCheck.getPlayers()) {
-								if (detective.isDetective()) {
-									Optional<Integer> detLocation = node.state.getDetectiveLocation((Piece.Detective) detective);
-									if (detLocation.isPresent()) {
-										if ((detLocation.get()).equals(getMoveDestination(move))) {
-											locationCheck += 1;
+			if(!groupedMoves.isEmpty()) {
+				for (Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())) {
+					Map<Integer, Integer> destination = new HashMap<>();
+					destination.put(0, 0);
+					//destination.put(getMoveDestination(move), stateEvaluation(board.advance(move), getMoveDestination(move)));
+					parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board));
+				}
+
+				// for all detectives, advance the board, and make new children for each move combination (order doesn't matter)
+				// changed, so it doesn't rely on the groupedMoves variable
+				for (Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()) {
+					// for each of the current nodes
+					List<TreeNode> newChildren = new ArrayList<>();
+					for (TreeNode node : parentNode.children) {
+						Board.GameState nodeCheck = node.state;
+						groupedMoves = nodeCheck.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
+						// if groupedMoves is empty, that means the game is over, so no new children should be made from this node
+						if (!groupedMoves.isEmpty()) {
+							// for each possible move of the current detective
+							for (Move move : groupedMoves.get(det)) {
+								int locationCheck = 0;
+								// runs a check to ensure the space isn't occupied
+								for (Piece detective : nodeCheck.getPlayers()) {
+									if (detective.isDetective()) {
+										Optional<Integer> detLocation = node.state.getDetectiveLocation((Piece.Detective) detective);
+										if (detLocation.isPresent()) {
+											if ((detLocation.get()).equals(getMoveDestination(move))) {
+												locationCheck += 1;
+											}
 										}
 									}
 								}
-							}
-							if (locationCheck == 0) {
-								Map<Integer, Integer> destination = new HashMap<>();
-								destination.put(getMoveDestination(move), 0);
-								int counter = 0;
-								for (TreeNode child : newChildren) {
-									if (child.LocationAndScore.keySet().equals(destination.keySet())) {
-										counter += 1;
-									}
-								}
-								if (counter == 0) {
-									List<Integer> detLocations = new ArrayList<>();
-									for (Piece detect : nodeCheck.getPlayers()) {
-										if (detect.isDetective()) {
-											detLocations.add(nodeCheck.getDetectiveLocation((Piece.Detective) detect).get());
+								if (locationCheck == 0) {
+									Map<Integer, Integer> destination = new HashMap<>();
+									destination.put(getMoveDestination(move), 0);
+									int counter = 0;
+									for (TreeNode child : newChildren) {
+										if (child.LocationAndScore.keySet().equals(destination.keySet())) {
+											counter += 1;
 										}
 									}
-									//System.out.println("Move : " + move + " , other detective locations: " + detLocations);
-									nodeCheck = node.state.advance(move);
-									newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+									if (counter == 0) {
+										nodeCheck = node.state.advance(move);
+										newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+									}
 								}
+								//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+
 							}
+						} else {
+							System.out.println("State over");
+							node.LocationAndScore.replace(node.LocationAndScore.keySet().iterator().next(), Integer.MIN_VALUE);
+							//destination.replace(destination.keySet().iterator().next(), Integer.MIN_VALUE);
 							//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 						}
 					}
+					parentNode.children = newChildren;
 				}
-				parentNode.children = newChildren;;
 			}
 
 		}
@@ -139,7 +146,7 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
 		TreeNode root = new TreeNode(new ArrayList<>(), move, board);
-		return treeMaker(root, board, 1);
+		return treeMaker(root, board, 2);
 	}
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
@@ -175,10 +182,6 @@ public class MyAi implements Ai {
 					//int location = getMoveDestination(iterator.next());
 					Integer loc = child.LocationAndScore.keySet().iterator().next();
 					Map<Integer,Integer> minimax = minimax(child, depth - 1, alpha, beta, true, count+1);
-					// current problem line:
-					// the key is the location of the detective that was processed last in the tree creation stage
-					// this should be the last occurring detective after the moves are grouped by 'commencer'
-					// current issue is that when I try to find this, it returns null, and the debug will break before I can assess the eval variable
 					int eval = minimax.get(loc);
 					int minEvalVal = minEval.get(minEval.keySet().iterator().next());
 					if (minEvalVal > eval) {
@@ -394,7 +397,7 @@ public class MyAi implements Ai {
 		TreeNode tree = treeInitialiser((Board.GameState) board);
 		System.out.println("Tree made");
 		//printTree(tree);
-		Map<Integer, Integer> weight = minimax(tree, 1, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
+		Map<Integer, Integer> weight = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
 		System.out.println(weight);
 		Map<Integer, Integer> bestMove = treeSearch(tree, weight.get(weight.keySet().iterator().next()), 0);
 		System.out.println(bestMove);
@@ -450,6 +453,9 @@ public class MyAi implements Ai {
 					}
 				}
 				Random randomInt = new Random();
+				if(choosableSecrets.size() <= 1){
+					return Objects.requireNonNull(maxNum.keySet().iterator().next());
+				}
 				return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 			}
 		}
