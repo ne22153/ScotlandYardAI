@@ -43,12 +43,17 @@ public class MyAi implements Ai {
 		for(Piece det : state.getPlayers()){
 			if(det.isDetective()) {
 				int newDist = shortestDistance(MrXLocation, (Piece.Detective) det, state);
+				System.out.println("With MrX location: "+MrXLocation+", distance to detective "+det+" is: "+newDist);
 				if(newDist <= 3){
 					score += newDist;
 					count += 1;
 				}
 				if (newDist >= minDist){
 					minDist = newDist;
+				}
+				// if the move leads to the detective being able to reach MrX, it should be rated badly
+				if(newDist == 1){
+					return -1;
 				}
 			}
 		}
@@ -59,14 +64,14 @@ public class MyAi implements Ai {
 		return score;
 	}
 
-	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count){
+	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count, boolean MrXTurn){
 		if(count == -1){
-			System.out.println("MrX location: "+parentNode.LocationAndScore.keySet().iterator().next());
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(board, (Integer) parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(parentNode.state, (Integer) parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
 			return parentNode;
 		}
 		// if it's MrX's turn, then a new child should be made for each move
-		if(board.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().isMrX())){
+		//if(board.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().isMrX())){
+		if(MrXTurn){
 			// for each move available to the parent node
 			for (Move newMove : board.getAvailableMoves()) {
 				Map<Integer, Integer> destination = new HashMap<>();
@@ -105,35 +110,37 @@ public class MyAi implements Ai {
 						// if groupedMoves is empty, that means the game is over, so no new children should be made from this node
 						if (!groupedMoves.isEmpty()) {
 							// for each possible move of the current detective
-							for (Move move : groupedMoves.get(det)) {
-								int locationCheck = 0;
-								// runs a check to ensure the space isn't occupied
-								for (Piece detective : nodeCheck.getPlayers()) {
-									if (detective.isDetective()) {
-										Optional<Integer> detLocation = node.state.getDetectiveLocation((Piece.Detective) detective);
-										if (detLocation.isPresent()) {
-											if ((detLocation.get()).equals(getMoveDestination(move))) {
-												locationCheck += 1;
+							if(!groupedMoves.keySet().iterator().next().isMrX()) {
+								for (Move move : groupedMoves.get(det)) {
+									int locationCheck = 0;
+									// runs a check to ensure the space isn't occupied
+									for (Piece detective : nodeCheck.getPlayers()) {
+										if (detective.isDetective()) {
+											Optional<Integer> detLocation = node.state.getDetectiveLocation((Piece.Detective) detective);
+											if (detLocation.isPresent()) {
+												if ((detLocation.get()).equals(getMoveDestination(move))) {
+													locationCheck += 1;
+												}
 											}
 										}
 									}
-								}
-								if (locationCheck == 0) {
-									Map<Integer, Integer> destination = new HashMap<>();
-									destination.put(getMoveDestination(move), 0);
-									int counter = 0;
-									for (TreeNode child : newChildren) {
-										if (child.LocationAndScore.keySet().equals(destination.keySet())) {
-											counter += 1;
+									if (locationCheck == 0) {
+										Map<Integer, Integer> destination = new HashMap<>();
+										destination.put(getMoveDestination(move), 0);
+										int counter = 0;
+										for (TreeNode child : newChildren) {
+											if (child.LocationAndScore.keySet().equals(destination.keySet())) {
+												counter += 1;
+											}
+										}
+										if (counter == 0) {
+											nodeCheck = node.state.advance(move);
+											newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 										}
 									}
-									if (counter == 0) {
-										nodeCheck = node.state.advance(move);
-										newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
-									}
-								}
-								//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
+									//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 
+								}
 							}
 						} else {
 							System.out.println("State over");
@@ -149,7 +156,7 @@ public class MyAi implements Ai {
 		}
 
 		for(TreeNode child : parentNode.children){
-			treeMaker(child, child.state, count-1);
+			treeMaker(child, child.state, count-1, !MrXTurn);
 		}
 		return parentNode;
 	}
@@ -159,7 +166,7 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
 		TreeNode root = new TreeNode(new ArrayList<>(), move, board);
-		return treeMaker(root, board, 2);
+		return treeMaker(root, board, 2, true);
 	}
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
@@ -397,7 +404,7 @@ public class MyAi implements Ai {
 		for(TreeNode node : tree.children){
 			nodeFound = treeSearch(node, weight, count+1);
 			if(!nodeFound.isEmpty()){
-				return  nodeFound;
+				return nodeFound;
 			}
 		}
 		return nodeFound;
