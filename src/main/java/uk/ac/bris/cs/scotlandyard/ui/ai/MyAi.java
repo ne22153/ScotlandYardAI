@@ -381,6 +381,19 @@ public class MyAi implements Ai {
 				// if the move is in the corner, then it's score should be lowered
 				weightedMove.put(move, weightedMove.get(move)-2);
 			}
+			for (Piece det : board.getPlayers()){
+				if (det.isDetective()) {
+					Optional<Integer> optDetLoc = board.getDetectiveLocation((Piece.Detective) det);
+					if (optDetLoc.isPresent()) {
+						int detLoc = optDetLoc.get();
+						for (int node : board.getSetup().graph.adjacentNodes(getMoveDestination(move))){
+							if (detLoc == node){
+								weightedMove.put(move, weightedMove.get(move)-5);
+							}
+						}
+					}
+				}
+			}
 		}
 
 		return weightedMove;
@@ -425,32 +438,35 @@ public class MyAi implements Ai {
 		destinationMoves = board.getAvailableMoves().stream()
 				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
 				.toList();
-		Map<Move, Integer> weightedMove = ticketWeighting(board, destinationMoves);
+		Map<Move, Integer> weightedMoves = ticketWeighting(board, destinationMoves);
+		System.out.println("Pre Moves weighted: "+weightedMoves);
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
 		Move maxNumMove = null;
 		try {
-			maxNum.put(destinationMoves.get(0), 1);
+			maxNum.put(destinationMoves.get(0), 0);
 			maxNumMove = destinationMoves.get(0);
 		} catch (Exception e){
 			System.out.println("It's empty again");
 
 		}
 		// if the player has more of one kind of ticket, then it should be picked
-		for (Move move : weightedMove.keySet()) {
-			if (weightedMove.get(move) >= maxNum.get(maxNumMove)) {
+		for (Move move : weightedMoves.keySet()) {
+			if (weightedMoves.get(move) >= maxNum.get(maxNumMove)) {
 				maxNum.clear();
-				maxNum.put(move,weightedMove.get(move));
+				maxNum.put(move,weightedMoves.get(move));
 				maxNumMove = move;
 			}
 		}
-		System.out.println("Moves weighted: "+weightedMove);
+		System.out.println("Moves weighted: "+weightedMoves);
 
 		// once a maxNum has been found, we should check if a secret card would be a better option
 		// if MrX's move was just a reveal, then play a secret card instead
 		List<Move> choosableSecrets = new ArrayList<>();
-		if(board.getMrXTravelLog().size() != 0) {
-			if (board.getSetup().moves.get(board.getMrXTravelLog().size() - 1)) {
+		if(board.getMrXTravelLog().size() != 0 || board.getMrXTravelLog().size() != 1) {
+			System.out.println("Inside the secret thing for some reason");
+			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size()-1)) {
+				System.out.println("HOW DID YOU GET IN HERE");
 				for (Move move : destinationMoves) {
 					if (move.accept(new Move.Visitor<ScotlandYard.Ticket>() {
 						@Override
@@ -479,6 +495,7 @@ public class MyAi implements Ai {
 				return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
 			}
 		}
+
 		return Objects.requireNonNull(maxNum.keySet().iterator().next());
 	}
 }
