@@ -19,6 +19,7 @@ import static java.lang.Math.*;
 
 public class MyAi implements Ai {
 
+	// inner class which defines the tree structure
 	static class TreeNode {
 		List<TreeNode> children;
 		Map<Integer, Integer> LocationAndScore;
@@ -31,8 +32,9 @@ public class MyAi implements Ai {
 		}
 	}
 
-	// applies the scoring function for the given game state (currently finds the mean distance of MrX from all detectives)
+	// applies the scoring function for the given game state
 	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation, Map<Integer, Integer> currentScore){
+		// if the game is over in this state, then it is the worst possible result, so the minimum value is returned to lower the chance of it being chosen
 		if(currentScore.get(currentScore.keySet().iterator().next()) == Integer.MIN_VALUE){
 			System.out.println("Game over move");
 			return Integer.MIN_VALUE;
@@ -44,10 +46,12 @@ public class MyAi implements Ai {
 			if(det.isDetective()) {
 				int newDist = shortestDistance(MrXLocation, (Piece.Detective) det, state);
 				System.out.println("With MrX location: "+MrXLocation+", distance to detective "+det+" is: "+newDist);
+				// for all detectives within 3 moves of MrX, then the score is the average of them all
 				if(newDist <= 3){
 					score += newDist;
 					count += 1;
 				}
+				// if no detective is within 3 moves of MrX, then the score is taken to be the nearest detective
 				if (newDist >= minDist){
 					minDist = newDist;
 				}
@@ -64,18 +68,19 @@ public class MyAi implements Ai {
 		return score;
 	}
 
+	// constructs the tree for the given depth
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count, boolean MrXTurn){
+		// if the bottom of the tree is reached, then no new children should be made, and all leaves should be evaluated
 		if(count == -1){
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(parentNode.state, (Integer) parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(parentNode.state, parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
 			return parentNode;
 		}
 		// if it's MrX's turn, then a new child should be made for each move
-		//if(board.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().isMrX())){
 		if(MrXTurn){
-			// for each move available to the parent node
+			// for each move available to the parent node, it should check if the destination has already been defined.
+			// If not, then the move's destination is added to the tree
 			for (Move newMove : board.getAvailableMoves()) {
 				Map<Integer, Integer> destination = new HashMap<>();
-				//destination.put(getMoveDestination(newMove), stateEvaluation(board.advance(newMove), getMoveDestination(newMove)));
 				destination.put(getMoveDestination(newMove), 0);
 				int counter = 0;
 				for(TreeNode child : parentNode.children){
@@ -90,17 +95,15 @@ public class MyAi implements Ai {
 		} else {
 			// if it's the detective's turns, then a new child should be made for each combination of moves
 			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
-			// add a new child for each possible move of the first detective
 			if(!groupedMoves.isEmpty()) {
+				// add a new child for each possible move of the first detective
 				for (Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())) {
 					Map<Integer, Integer> destination = new HashMap<>();
 					destination.put(0, 0);
-					//destination.put(getMoveDestination(move), stateEvaluation(board.advance(move), getMoveDestination(move)));
 					parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board));
 				}
 
 				// for all detectives, advance the board, and make new children for each move combination (order doesn't matter)
-				// changed, so it doesn't rely on the groupedMoves variable
 				for (Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()) {
 					// for each of the current nodes
 					List<TreeNode> newChildren = new ArrayList<>();
@@ -138,30 +141,24 @@ public class MyAi implements Ai {
 											newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 										}
 									}
-									//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
-
 								}
 							}
 						} else {
-							System.out.println("State over");
 							node.LocationAndScore.replace(node.LocationAndScore.keySet().iterator().next(), Integer.MIN_VALUE);
-							//destination.replace(destination.keySet().iterator().next(), Integer.MIN_VALUE);
-							//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
 						}
 					}
 					parentNode.children = newChildren;
 				}
 			}
-
 		}
-
+		// for each child, the tree continues to be made
 		for(TreeNode child : parentNode.children){
 			treeMaker(child, child.state, count-1, !MrXTurn);
 		}
 		return parentNode;
 	}
 
-	// sets up the tree for traversal
+	// sets up the tree for traversal and creation
 	private TreeNode treeInitialiser(Board.GameState board){
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
@@ -170,8 +167,12 @@ public class MyAi implements Ai {
 	}
 
 	// based on pseudocode from https://www.youtube.com/watch?v=l-hh51ncgDI
+	// minimax should traverse the tree, reaching the bottom and moving upwards
+	// for each level, it should look through the children's scores, and choose either the lowest or highest depending
+	// on whether they're minimising or maximising respectively
 	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer, int count){
 		if(parentNode.children.isEmpty() || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+		// the maximising player should always be MrX
 		if(maximisingPlayer){
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, -(Integer.MAX_VALUE));
@@ -183,6 +184,7 @@ public class MyAi implements Ai {
 					maxEval.clear();
 					maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
 				}
+				// if the branch you're currently working on gains a value larger than the other branch, then we're done with it, so we can break
 				alpha = max(alpha, eval);
 				if (beta <= alpha) {
 					break;
@@ -199,7 +201,6 @@ public class MyAi implements Ai {
 					for(int i = 0; i < count; i++){
 						iterator.next();
 					}
-					//int location = getMoveDestination(iterator.next());
 					Integer loc = child.LocationAndScore.keySet().iterator().next();
 					Map<Integer,Integer> minimax = minimax(child, depth - 1, alpha, beta, true, count+1);
 					int eval = minimax.get(loc);
@@ -222,8 +223,8 @@ public class MyAi implements Ai {
 		}
 	}
 
+	// ensures that the given detective has the needed tickets for a move
 	private boolean ticketmaster(Piece det, ImmutableSet<ScotlandYard.Transport> transport, Board board){
-		// check to see if the given piece has a ticket that allows them to move in this direction
 		for(ScotlandYard.Transport t : transport){
 			Board.TicketBoard tickets;
 			if(board.getPlayerTickets(det).isPresent()){
@@ -236,6 +237,8 @@ public class MyAi implements Ai {
 		return false;
 	}
 
+	// returns the final destination of a given move
+	// uses visitor pattern as the destinations are private
 	@Nonnull private Integer getMoveDestination(Move move){
 		return move.accept(new Move.Visitor<Integer>() {
 
@@ -251,15 +254,13 @@ public class MyAi implements Ai {
 		});
 	}
 
+	// finds the shortest distance between a detective and the given point on the board. This should depend on the tickets the detective has
 	@Nonnull @SuppressWarnings("UnstableApiUsage") private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
-		//PriorityQueue<Integer> pq = new PriorityQueue<>();
 		// get the detective's location
 		int source = 0;
 		if(board.getDetectiveLocation(detective).isPresent()){
 			source = board.getDetectiveLocation(detective).get();
 		}
-		// adjacent nodes to the detective's current location
-		//Set<Integer> nodes = board.getSetup().graph.adjacentNodes(source);
 
 		// set of all nodes in the graph & it's iterator
 		Set<Integer> nodes = board.getSetup().graph.nodes();
@@ -336,6 +337,8 @@ public class MyAi implements Ai {
 	public void onTerminate() {
 		Ai.super.onTerminate();
 	}
+
+	// weights the given moves (ones which end up in the optimal destination) based on the defined strategy
 	@SuppressWarnings("UnstableApiUsage")
 	private Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
 		Map<Move,Integer> weightedMove = new HashMap<>();
@@ -399,6 +402,7 @@ public class MyAi implements Ai {
 		return weightedMove;
 	}
 
+	// prints the tree, used for testing
 	@SuppressWarnings("unused")
 	private void printTree(TreeNode tree){
 		System.out.println("Node "+tree.LocationAndScore+" has children: ");
@@ -407,6 +411,7 @@ public class MyAi implements Ai {
 		}
 	}
 
+	// searches through the tree and finds the moves which result in the given weight
 	private Map<Integer, Integer> treeSearch(TreeNode tree, Integer weight, int count){
 		if(count == 1) {
 			if (tree.LocationAndScore.get(tree.LocationAndScore.keySet().iterator().next()).equals(weight)) {
@@ -423,19 +428,17 @@ public class MyAi implements Ai {
 		return nodeFound;
 	}
 
+	// manages the overall move picking
 	@Nonnull @Override public Move pickMove(
 			@Nonnull Board board,
 			Pair<Long, TimeUnit> timeoutPair) {
-
+		//  creates the tree and evaluates it
 		TreeNode tree = treeInitialiser((Board.GameState) board);
-		System.out.println("Tree made");
-		//printTree(tree);
 		Map<Integer, Integer> weight = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
-		System.out.println(weight);
+		// finds the best destination in the tree
 		Map<Integer, Integer> bestMove = treeSearch(tree, weight.get(weight.keySet().iterator().next()), 0);
-		System.out.println(bestMove);
-		List<Move> destinationMoves = new ArrayList<>();
-		destinationMoves = board.getAvailableMoves().stream()
+
+		List<Move> destinationMoves = board.getAvailableMoves().stream()
 				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
 				.toList();
 		Map<Move, Integer> weightedMoves = ticketWeighting(board, destinationMoves);
@@ -463,7 +466,7 @@ public class MyAi implements Ai {
 		// once a maxNum has been found, we should check if a secret card would be a better option
 		// if MrX's move was just a reveal, then play a secret card instead
 		List<Move> choosableSecrets = new ArrayList<>();
-		if(board.getMrXTravelLog().size() != 0 || board.getMrXTravelLog().size() != 1) {
+		if(board.getMrXTravelLog().size() > 1) {
 			System.out.println("Inside the secret thing for some reason");
 			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size()-1)) {
 				System.out.println("HOW DID YOU GET IN HERE");
