@@ -419,7 +419,7 @@ public class MyAi implements Ai {
 
 	// searches through the tree and finds the moves which result in the given weight
 	private Map<Integer, Integer> treeSearch(TreeNode tree, Integer weight, int count){
-		if(count == 1) {
+		/*if(count == 1) {
 			if (tree.LocationAndScore.get(tree.LocationAndScore.keySet().iterator().next()).equals(weight)) {
 				return tree.LocationAndScore;
 			}
@@ -428,6 +428,12 @@ public class MyAi implements Ai {
 		for(TreeNode node : tree.children){
 			if(!treeSearch(node, weight, count + 1).isEmpty()) {
 				nodeFound.put(node.LocationAndScore.keySet().iterator().next(), treeSearch(node, weight, count + 1).get(node.LocationAndScore.keySet().iterator().next()));
+			}
+		}*/
+		Map<Integer, Integer> nodeFound = new HashMap<>();
+		for(TreeNode node: tree.children){
+			if(node.LocationAndScore.get(node.LocationAndScore.keySet().iterator().next()).equals(weight)){
+				nodeFound.put(node.LocationAndScore.keySet().iterator().next(), node.LocationAndScore.get(node.LocationAndScore.keySet().iterator().next()));
 			}
 		}
 		return nodeFound;
@@ -499,24 +505,26 @@ public class MyAi implements Ai {
 			System.out.println(board.getMrXTravelLog().size());
 			// secret cards should be played after a reveal move to hide where he went
 			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size())) {
-				System.out.println("Entering secret weighting");
-				for (Move move : choosableSecrets) {
-					if (!getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
+				if(!choosableSecrets.isEmpty()) {
+					System.out.println("Entering secret weighting");
+					/*for (Move move : choosableSecrets) {
+						if (!getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
 							choosableSecrets.remove(move);
-					}
-				}
+						}
+					}*/
 
-				System.out.println("Choosable secrets: "+choosableSecrets);
-				Map<Move, Integer> weightedSecrets = ticketWeighting(board, choosableSecrets);
+					System.out.println("Choosable secrets: " + choosableSecrets);
+					Map<Move, Integer> weightedSecrets = ticketWeighting(board, choosableSecrets);
 
-				for (Move move : weightedSecrets.keySet()) {
-					if (weightedSecrets.get(move) >= maxNum.get(maxNumMove)) {
-						maxNum.clear();
-						maxNum.put(move,weightedSecrets.get(move));
-						maxNumMove = move;
+					for (Move move : weightedSecrets.keySet()) {
+						if (weightedSecrets.get(move) >= maxNum.get(maxNumMove)) {
+							maxNum.clear();
+							maxNum.put(move, weightedSecrets.get(move));
+							maxNumMove = move;
+						}
 					}
+					return Objects.requireNonNull(maxNumMove);
 				}
-				return Objects.requireNonNull(maxNumMove);
 			}
 		}
 
