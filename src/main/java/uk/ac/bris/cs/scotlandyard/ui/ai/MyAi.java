@@ -9,7 +9,6 @@ import javax.annotation.Nonnull;
 
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.UnmodifiableIterator;
 import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
 
@@ -45,14 +44,14 @@ public class MyAi implements Ai {
 		for(Piece det : state.getPlayers()){
 			if(det.isDetective()) {
 				int newDist = shortestDistance(MrXLocation, (Piece.Detective) det, state);
-				System.out.println("With MrX location: "+MrXLocation+", distance to detective "+det+" is: "+newDist);
+				//System.out.println("With MrX location: "+MrXLocation+", distance to detective "+det+" is: "+newDist);
 				// for all detectives within 3 moves of MrX, then the score is the average of them all
 				if(newDist <= 3){
 					score += newDist;
 					count += 1;
 				}
 				// if no detective is within 3 moves of MrX, then the score is taken to be the nearest detective
-				if (newDist >= minDist){
+				if (newDist <= minDist){
 					minDist = newDist;
 				}
 				// if the move leads to the detective being able to reach MrX, it should be rated badly
@@ -171,7 +170,13 @@ public class MyAi implements Ai {
 	// for each level, it should look through the children's scores, and choose either the lowest or highest depending
 	// on whether they're minimising or maximising respectively
 	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer, int count){
-		if(parentNode.children.isEmpty() || !parentNode.state.getWinner().isEmpty()){return parentNode.LocationAndScore;}
+		if(parentNode.children.isEmpty()){return parentNode.LocationAndScore;}
+		if(!parentNode.state.getWinner().isEmpty() && parentNode.state.getWinner().stream().anyMatch(Piece::isMrX)){
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MAX_VALUE);
+			return parentNode.LocationAndScore;
+		} else if(!parentNode.state.getWinner().isEmpty() && parentNode.state.getWinner().stream().anyMatch(Piece::isDetective)){
+			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MIN_VALUE);
+		}
 		// the maximising player should always be MrX
 		if(maximisingPlayer){
 			Map<Integer, Integer> maxEval = new HashMap<>();
@@ -255,7 +260,7 @@ public class MyAi implements Ai {
 	}
 
 	// finds the shortest distance between a detective and the given point on the board. This should depend on the tickets the detective has
-	@Nonnull @SuppressWarnings("UnstableApiUsage") private Integer shortestDistance(Integer destination, Piece.Detective detective, Board board){
+	@Nonnull @SuppressWarnings("UnstableApiUsage") private Integer shortestDistance(Integer destination, Piece.Detective detective, Board.GameState board){
 		// get the detective's location
 		int source = 0;
 		if(board.getDetectiveLocation(detective).isPresent()){
@@ -301,6 +306,7 @@ public class MyAi implements Ai {
 			}
 			visited.set(index, Boolean.TRUE);
 			Set<Integer> successors = board.getSetup().graph.successors(currentNode);
+			//Set<Integer> successors = board.getSetup().graph.edges().stream().toList();
 			// go through successors to assess weights
 			for (Integer successor : successors) {
 				Iterator<Integer> nodesIterator2 = nodes.iterator();
@@ -313,9 +319,9 @@ public class MyAi implements Ai {
 					}
 				}
 
-				// need to change this section for transport types
-				if (board.getSetup().graph.edgeValue(currentNode, successor).isPresent()) {
-					if(ticketmaster(detective, board.getSetup().graph.edgeValue(currentNode, successor).get(), board)) {
+				Optional<ImmutableSet<ScotlandYard.Transport>> transports = board.getSetup().graph.edgeValue(currentNode, successor);
+				if (transports.isPresent()) {
+					if(ticketmaster(detective, transports.get(), board)) {
 						if ((dist.get(index) + 1) < dist.get(count)) {
 							dist.set(count, (dist.get(index) + 1));
 						}
@@ -343,7 +349,7 @@ public class MyAi implements Ai {
 	private Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
 		Map<Move,Integer> weightedMove = new HashMap<>();
 		for(Move move : destinationMoves){
-			weightedMove.clear();
+			//weightedMove.clear();
 			Integer moveInt = (move.accept(new Move.Visitor<Integer>() {
 				// using visitor pattern to find how many of the wanted ticket are available
 				@Override
@@ -380,10 +386,10 @@ public class MyAi implements Ai {
 		// if MrX is in a corner area, weight the move which leads towards the centre
 		// define a corner by a node which has <= 2 adjacent nodes
 		for(Move move : weightedMove.keySet()){
-			if (board.getSetup().graph.adjacentNodes(getMoveDestination(move)).size() <= 2) {
+			/*if (board.getSetup().graph.adjacentNodes(getMoveDestination(move)).size() <= 2) {
 				// if the move is in the corner, then it's score should be lowered
 				weightedMove.put(move, weightedMove.get(move)-2);
-			}
+			}*/
 			for (Piece det : board.getPlayers()){
 				if (det.isDetective()) {
 					Optional<Integer> optDetLoc = board.getDetectiveLocation((Piece.Detective) det);
@@ -420,9 +426,8 @@ public class MyAi implements Ai {
 		}
 		Map<Integer, Integer> nodeFound = new HashMap<>();
 		for(TreeNode node : tree.children){
-			nodeFound = treeSearch(node, weight, count+1);
-			if(!nodeFound.isEmpty()){
-				return nodeFound;
+			if(!treeSearch(node, weight, count + 1).isEmpty()) {
+				nodeFound.put(node.LocationAndScore.keySet().iterator().next(), treeSearch(node, weight, count + 1).get(node.LocationAndScore.keySet().iterator().next()));
 			}
 		}
 		return nodeFound;
@@ -437,12 +442,38 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> weight = minimax(tree, 2, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
 		// finds the best destination in the tree
 		Map<Integer, Integer> bestMove = treeSearch(tree, weight.get(weight.keySet().iterator().next()), 0);
+		System.out.println("Possible destinations: "+bestMove);
+		List<Move> destinationMoves = new ArrayList<>();
+		List<Move> choosableSecrets = new ArrayList<>();
+		Iterator<Move> moveIterator = board.getAvailableMoves().stream().iterator();
+		//Iterator<Integer> bestIterator = bestMove.keySet().iterator();
+		while(moveIterator.hasNext()){
+			Move newValue = moveIterator.next();
+			Iterator<Integer> bestIterator = bestMove.keySet().iterator();
+			while(bestIterator.hasNext()) {
+				Integer bestValue = bestIterator.next();
+				if (getMoveDestination(newValue).equals(bestValue)) {
+					// should only add move which don't use secret tickets, as the weighting for these are separate
+					if(newValue.accept(new Move.Visitor<Boolean>() {
+						@Override
+						public Boolean visit(Move.SingleMove move) {
+							return !move.ticket.equals(ScotlandYard.Ticket.SECRET);
+						}
 
-		List<Move> destinationMoves = board.getAvailableMoves().stream()
-				.filter((x) -> getMoveDestination(x).equals(bestMove.keySet().iterator().next()))
-				.toList();
+						@Override
+						public Boolean visit(Move.DoubleMove move) {
+							return !(move.ticket1.equals(ScotlandYard.Ticket.SECRET) || move.ticket2.equals(ScotlandYard.Ticket.SECRET));
+						}
+					})) {
+						destinationMoves.add(newValue);
+					} else {
+						choosableSecrets.add(newValue);
+					}
+				}
+			}
+		}
 		Map<Move, Integer> weightedMoves = ticketWeighting(board, destinationMoves);
-		System.out.println("Pre Moves weighted: "+weightedMoves);
+		//System.out.println("Pre Moves weighted: "+weightedMoves);
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
 		Move maxNumMove = null;
@@ -461,44 +492,34 @@ public class MyAi implements Ai {
 				maxNumMove = move;
 			}
 		}
-		System.out.println("Moves weighted: "+weightedMoves);
 
 		// once a maxNum has been found, we should check if a secret card would be a better option
-		// if MrX's move was just a reveal, then play a secret card instead
-		List<Move> choosableSecrets = new ArrayList<>();
 		if(board.getMrXTravelLog().size() > 1) {
-			System.out.println("Inside the secret thing for some reason");
-			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size()-1)) {
-				System.out.println("HOW DID YOU GET IN HERE");
-				for (Move move : destinationMoves) {
-					if (move.accept(new Move.Visitor<ScotlandYard.Ticket>() {
-						@Override
-						public ScotlandYard.Ticket visit(Move.SingleMove move) {
-							return move.ticket;
-						}
-
-						@Override
-						public ScotlandYard.Ticket visit(Move.DoubleMove move) {
-							if (move.ticket1.equals(ScotlandYard.Ticket.SECRET)) {
-								return move.ticket1;
-							} else {
-								return move.ticket2;
-							}
-						}
-					}).equals(ScotlandYard.Ticket.SECRET)) {
-						if (getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
-							choosableSecrets.add(move);
-						}
+			System.out.println(ScotlandYard.REVEAL_MOVES);
+			System.out.println(board.getMrXTravelLog().size());
+			// secret cards should be played after a reveal move to hide where he went
+			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size())) {
+				System.out.println("Entering secret weighting");
+				for (Move move : choosableSecrets) {
+					if (!getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
+							choosableSecrets.remove(move);
 					}
 				}
-				Random randomInt = new Random();
-				if(choosableSecrets.size() <= 1){
-					return Objects.requireNonNull(maxNum.keySet().iterator().next());
+
+				System.out.println("Choosable secrets: "+choosableSecrets);
+				Map<Move, Integer> weightedSecrets = ticketWeighting(board, choosableSecrets);
+
+				for (Move move : weightedSecrets.keySet()) {
+					if (weightedSecrets.get(move) >= maxNum.get(maxNumMove)) {
+						maxNum.clear();
+						maxNum.put(move,weightedSecrets.get(move));
+						maxNumMove = move;
+					}
 				}
-				return choosableSecrets.get(abs(randomInt.nextInt(choosableSecrets.size() - 1)));
+				return Objects.requireNonNull(maxNumMove);
 			}
 		}
 
-		return Objects.requireNonNull(maxNum.keySet().iterator().next());
+		return Objects.requireNonNull(maxNumMove);
 	}
 }
