@@ -151,7 +151,6 @@ public class MyAi implements Ai {
 												minDestination.put(getMoveDestination(move), Integer.MIN_VALUE + 1);
 											}
 										} catch (Exception ignored){
-											System.out.println("Bad move");
 										}
 									}
 									if (!minDestination.isEmpty()) {
@@ -232,7 +231,6 @@ public class MyAi implements Ai {
 			minEval.put(0, Integer.MAX_VALUE);
 			if(!parentNode.children.isEmpty()) {
 				for (TreeNode child : parentNode.children) {
-					System.out.println("loc" +child.LocationAndScore);
 					/*Iterator<Move> iterator = child.state.getAvailableMoves().iterator();
 					for(int i = 0; i < count; i++){
 						iterator.next();
@@ -369,6 +367,9 @@ public class MyAi implements Ai {
 							dist.set(count, (dist.get(index) + 1));
 						}
 					}
+					else{
+						System.out.println("Detective "+detective+" can't use the transport!");
+					}
 				}
 			}
 		}
@@ -401,7 +402,8 @@ public class MyAi implements Ai {
 						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
 						if (optTickets.isPresent()) {
 							Board.TicketBoard tickets = optTickets.get();
-							return tickets.getCount(move.ticket);
+							double ticketNum = Math.floor((double)tickets.getCount(move.ticket)/2);
+							return (int) ticketNum;
 						}
 					} catch (NullPointerException exception){
 						System.out.println("Ticket for move was not found!");
@@ -415,7 +417,8 @@ public class MyAi implements Ai {
 						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
 						if (optTickets.isPresent()) {
 							Board.TicketBoard tickets = optTickets.get();
-							return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
+							double ticketNum = Math.floor((double)(max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)))/2);
+							return (int) ticketNum;
 						}
 					} catch (NullPointerException exception){
 						System.out.println("Tickets for moves were not found!");
@@ -493,7 +496,7 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> bestMove = treeSearch(tree, weight.get(weight.keySet().iterator().next()), 0);
 		System.out.println("Possible destinations: "+bestMove);
 		List<Move> destinationMoves = new ArrayList<>();
-		List<Move> choosableSecrets = new ArrayList<>();
+		Map<Move,Integer> choosableSecrets = new HashMap<>();
 		Iterator<Move> moveIterator = board.getAvailableMoves().stream().iterator();
 		//Iterator<Integer> bestIterator = bestMove.keySet().iterator();
 		while(moveIterator.hasNext()){
@@ -516,7 +519,7 @@ public class MyAi implements Ai {
 					})) {
 						destinationMoves.add(newValue);
 					} else {
-						choosableSecrets.add(newValue);
+						choosableSecrets.put(newValue,bestMove.get(bestValue));
 					}
 				}
 			}
@@ -533,6 +536,7 @@ public class MyAi implements Ai {
 			System.out.println("It's empty again");
 
 		}
+		System.out.println("gets here");
 		// if the player has more of one kind of ticket, then it should be picked
 		for (Move move : weightedMoves.keySet()) {
 			if (weightedMoves.get(move) >= maxNum.get(maxNumMove)) {
@@ -555,22 +559,22 @@ public class MyAi implements Ai {
 							choosableSecrets.remove(move);
 						}
 					}*/
-
-					System.out.println("Choosable secrets: " + choosableSecrets);
-					Map<Move, Integer> weightedSecrets = ticketWeighting(board, choosableSecrets);
-
-					for (Move move : weightedSecrets.keySet()) {
-						if (weightedSecrets.get(move) >= maxNum.get(maxNumMove)) {
-							maxNum.clear();
-							maxNum.put(move, weightedSecrets.get(move));
-							maxNumMove = move;
+					Map<Move,Integer> bestSecret = new HashMap<>();
+					bestSecret.put(maxNumMove,maxNum.get(maxNumMove));
+					Move bestSecretMove = bestSecret.keySet().iterator().next();
+					System.out.println("Choosable secrets: " + choosableSecrets);;
+					for (Move move : choosableSecrets.keySet()) {
+						if (getMoveDestination(move) >= getMoveDestination(maxNumMove)) {
+							bestSecret.clear();
+							bestSecret.put(move, choosableSecrets.get(move));
+							bestSecretMove = move;
 						}
 					}
-					return Objects.requireNonNull(maxNumMove);
+					return Objects.requireNonNull(bestSecretMove);
 				}
 			}
 		}
-
+		System.out.println("about to return");
 		return Objects.requireNonNull(maxNumMove);
 	}
 }
