@@ -73,6 +73,8 @@ public class MyAi implements Ai {
 		if(count == -1){
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(parentNode.state, parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
 			return parentNode;
+		} else if (!parentNode.LocationAndScore.get(parentNode.LocationAndScore.keySet().iterator().next()).equals(0)){
+			return parentNode;
 		}
 		// if it's MrX's turn, then a new child should be made for each move
 		if(MrXTurn){
@@ -107,14 +109,13 @@ public class MyAi implements Ai {
 					//System.out.println("Entering new detective: "+det);
 					//System.out.println("Current children: "+parentNode.children);
 					// for each of the current nodes
-					List<TreeNode> newChildren = new ArrayList<>();
 					for (Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()) {
 						if(parentNode.children.get(0).state.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().equals(det))) {
 							TreeNode node = parentNode.children.get(0);
 							//System.out.println("Current detective: " + det);
 							int minValue = Integer.MAX_VALUE;
 							Board.GameState minState = node.state;
-							Move minMove = minState.getAvailableMoves().iterator().next();
+							Move minMove = null;
 							Map<Integer, Integer> minDestination = new HashMap<>();
 							groupedMoves = minState.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
 							// if groupedMoves is empty, that means the game is over, so no new children should be made from this node
@@ -137,25 +138,28 @@ public class MyAi implements Ai {
 										if (locationCheck == 0) {
 											Map<Integer, Integer> destination = new HashMap<>();
 											destination.put(getMoveDestination(move), 0);
-											int counter = 0;
-											for (TreeNode child : newChildren) {
-												if (child.LocationAndScore.keySet().equals(destination.keySet())) {
-													counter += 1;
-												}
+											if (shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state) < minValue) {
+												minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
+												minMove = move;
+												minDestination = destination;
 											}
-											if (counter == 0) {
-												//newChildren.add(new TreeNode(node.children, destination, node.state.advance(move)));
-												if (shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state) < minValue) {
-													minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
-													minMove = move;
-													minDestination = destination;
-												}
+										}
+										try {
+											if (parentNode.state.advance(move).getWinner().stream().anyMatch(x -> x.isDetective())) {
+												minMove = move;
+												minDestination = new HashMap<>();
+												minDestination.put(getMoveDestination(move), Integer.MIN_VALUE + 1);
 											}
+										} catch (Exception ignored){
+											System.out.println("Bad move");
 										}
 									}
 									if (!minDestination.isEmpty()) {
-										//newChildren.add(new TreeNode(node.children, minDestination, node.state.advance(minMove)));
-										parentNode.children.set(0, new TreeNode(node.children, minDestination, parentNode.state.advance(minMove)));
+										try{
+											parentNode.children.set(0, new TreeNode(node.children, minDestination, parentNode.state.advance(minMove)));
+										} catch (Exception ignored){
+										}
+
 									}
 								}
 							} else {
@@ -202,7 +206,7 @@ public class MyAi implements Ai {
 				Integer loc = child.LocationAndScore.keySet().iterator().next();
 				Map<Integer, Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
 				int eval = blah.get(loc);
-				if (maxEval.get(maxEval.keySet().iterator().next()) < eval) {
+				if (maxEval.get(maxEval.keySet().iterator().next()) <= eval) {
 					maxEval.clear();
 					maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
 				}
@@ -212,6 +216,15 @@ public class MyAi implements Ai {
 					break;
 				}
 			}
+			/*if(!parentNode.state.getWinner().isEmpty()){
+				if(parentNode.state.getWinner().stream().anyMatch(Piece::isMrX)){
+					maxEval.clear();
+					maxEval.put(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MAX_VALUE);
+				} else {
+					maxEval.clear();
+					maxEval.put(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MIN_VALUE);
+				}
+			}*/
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), maxEval.get(maxEval.keySet().iterator().next()));
 			return parentNode.LocationAndScore;
 		} else {
@@ -228,12 +241,15 @@ public class MyAi implements Ai {
 					Map<Integer,Integer> minimax = minimax(child, depth - 1, alpha, beta, true, count+1);
 					int eval = minimax.get(loc);
 					int minEvalVal = minEval.get(minEval.keySet().iterator().next());
-					if (minEvalVal > eval) {
-						if(!child.state.getAvailableMoves().isEmpty()) {
+					if (minEvalVal >= eval) {
+						/*if(!child.state.getAvailableMoves().isEmpty()) {
 							int source = child.state.getAvailableMoves().iterator().next().source();
 							minEval.clear();
 							minEval.put(source, eval);
-						}
+						}*/
+						//int source = child.state.getAvailableMoves().iterator().next().source();
+						minEval.clear();
+						minEval.put(0, eval);
 					}
 					beta = min(beta, eval);
 					if (beta <= alpha) {
@@ -241,6 +257,15 @@ public class MyAi implements Ai {
 					}
 				}
 			}
+			/*if(!parentNode.state.getWinner().isEmpty()){
+				if(parentNode.state.getWinner().stream().anyMatch(Piece::isMrX)){
+					minEval.clear();
+					minEval.put(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MAX_VALUE);
+				} else {
+					minEval.clear();
+					minEval.put(parentNode.LocationAndScore.keySet().iterator().next(), Integer.MIN_VALUE);
+				}
+			}*/
 			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), minEval.get(minEval.keySet().iterator().next()));
 			return parentNode.LocationAndScore;
 		}
