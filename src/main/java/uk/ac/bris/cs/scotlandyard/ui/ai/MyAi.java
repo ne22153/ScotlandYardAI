@@ -35,7 +35,6 @@ public class MyAi implements Ai {
 	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation, Map<Integer, Integer> currentScore){
 		// if the game is over in this state, then it is the worst possible result, so the minimum value is returned to lower the chance of it being chosen
 		if(currentScore.get(currentScore.keySet().iterator().next()) == Integer.MIN_VALUE){
-			System.out.println("Game over move");
 			return Integer.MIN_VALUE;
 		}
 		int score = 0;
@@ -71,7 +70,10 @@ public class MyAi implements Ai {
 	private TreeNode treeMaker(TreeNode parentNode, Board.GameState board, int count, boolean MrXTurn){
 		// if the bottom of the tree is reached, then no new children should be made, and all leaves should be evaluated
 		if(count == -1){
-			parentNode.LocationAndScore.replace(parentNode.LocationAndScore.keySet().iterator().next(), stateEvaluation(parentNode.state, parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore));
+			int key = parentNode.LocationAndScore.keySet().iterator().next();
+			int stateEval = stateEvaluation(parentNode.state, parentNode.LocationAndScore.keySet().iterator().next(), parentNode.LocationAndScore);
+			parentNode.LocationAndScore.clear();
+			parentNode.LocationAndScore.put(key,stateEval);
 			return parentNode;
 		} else if (!parentNode.LocationAndScore.get(parentNode.LocationAndScore.keySet().iterator().next()).equals(0)){
 			return parentNode;
@@ -97,22 +99,10 @@ public class MyAi implements Ai {
 			// if it's the detective's turns, then a new child should be made for each combination of moves
 			Map<Piece, List<Move>> groupedMoves = board.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
 			if(!groupedMoves.isEmpty()) {
-				// add a new child for each possible move of the first detective
-				/*for (Move move : groupedMoves.get(groupedMoves.keySet().iterator().next())) {
-					Map<Integer, Integer> destination = new HashMap<>();
-					destination.put(0, 0);
-					parentNode.children.add(new TreeNode(new ArrayList<>(), destination, board));
-				}*/
 				parentNode.children.add(new TreeNode(new ArrayList<>(), parentNode.LocationAndScore, parentNode.state));
-				// for all detectives, advance the board, and make new children for each move combination (order doesn't matter)
-				//for (TreeNode node : parentNode.children) {
-					//System.out.println("Entering new detective: "+det);
-					//System.out.println("Current children: "+parentNode.children);
-					// for each of the current nodes
 					for (Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()) {
 						if(parentNode.children.get(0).state.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().equals(det))) {
 							TreeNode node = parentNode.children.get(0);
-							//System.out.println("Current detective: " + det);
 							int minValue = Integer.MAX_VALUE;
 							Board.GameState minState = node.state;
 							Move minMove = null;
@@ -359,7 +349,6 @@ public class MyAi implements Ai {
 						count++;
 					}
 				}
-
 				Optional<ImmutableSet<ScotlandYard.Transport>> transports = board.getSetup().graph.edgeValue(currentNode, successor);
 				if (transports.isPresent()) {
 					if(ticketmaster(detective, transports.get(), board)) {
@@ -368,7 +357,7 @@ public class MyAi implements Ai {
 						}
 					}
 					else{
-						System.out.println("Detective "+detective+" can't use the transport!");
+						cont = false;
 					}
 				}
 			}
@@ -401,9 +390,7 @@ public class MyAi implements Ai {
 					try {
 						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
 						if (optTickets.isPresent()) {
-							Board.TicketBoard tickets = optTickets.get();
-							double ticketNum = Math.floor((double)tickets.getCount(move.ticket)/2);
-							return (int) ticketNum;
+							return optTickets.get().getCount(move.ticket);
 						}
 					} catch (NullPointerException exception){
 						System.out.println("Ticket for move was not found!");
@@ -417,8 +404,7 @@ public class MyAi implements Ai {
 						Optional<Board.TicketBoard> optTickets = board.getPlayerTickets(move.commencedBy());
 						if (optTickets.isPresent()) {
 							Board.TicketBoard tickets = optTickets.get();
-							double ticketNum = Math.floor((double)(max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)))/2);
-							return (int) ticketNum;
+							return max(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2)) - min(tickets.getCount(move.ticket1), tickets.getCount(move.ticket2));
 						}
 					} catch (NullPointerException exception){
 						System.out.println("Tickets for moves were not found!");
@@ -494,7 +480,6 @@ public class MyAi implements Ai {
 		Map<Integer, Integer> weight = minimax(tree, 4, -(Integer.MAX_VALUE), Integer.MAX_VALUE, true, 0);
 		// finds the best destination in the tree
 		Map<Integer, Integer> bestMove = treeSearch(tree, weight.get(weight.keySet().iterator().next()), 0);
-		System.out.println("Possible destinations: "+bestMove);
 		List<Move> destinationMoves = new ArrayList<>();
 		Map<Move,Integer> choosableSecrets = new HashMap<>();
 		Iterator<Move> moveIterator = board.getAvailableMoves().stream().iterator();
@@ -525,7 +510,6 @@ public class MyAi implements Ai {
 			}
 		}
 		Map<Move, Integer> weightedMoves = ticketWeighting(board, destinationMoves);
-		//System.out.println("Pre Moves weighted: "+weightedMoves);
 		// select the best move after all weighting has been applied
 		Map<Move,Integer> maxNum = new HashMap<>();
 		Move maxNumMove = null;
@@ -536,7 +520,6 @@ public class MyAi implements Ai {
 			System.out.println("It's empty again");
 
 		}
-		System.out.println("gets here");
 		// if the player has more of one kind of ticket, then it should be picked
 		for (Move move : weightedMoves.keySet()) {
 			if (weightedMoves.get(move) >= maxNum.get(maxNumMove)) {
@@ -553,7 +536,6 @@ public class MyAi implements Ai {
 			// secret cards should be played after a reveal move to hide where he went
 			if (ScotlandYard.REVEAL_MOVES.contains(board.getMrXTravelLog().size())) {
 				if(!choosableSecrets.isEmpty()) {
-					System.out.println("Entering secret weighting");
 					/*for (Move move : choosableSecrets) {
 						if (!getMoveDestination(move).equals(getMoveDestination(Objects.requireNonNull(maxNumMove)))) {
 							choosableSecrets.remove(move);
@@ -562,7 +544,7 @@ public class MyAi implements Ai {
 					Map<Move,Integer> bestSecret = new HashMap<>();
 					bestSecret.put(maxNumMove,maxNum.get(maxNumMove));
 					Move bestSecretMove = bestSecret.keySet().iterator().next();
-					System.out.println("Choosable secrets: " + choosableSecrets);;
+					System.out.println("Choosable secrets: " + choosableSecrets);
 					for (Move move : choosableSecrets.keySet()) {
 						if (getMoveDestination(move) >= getMoveDestination(maxNumMove)) {
 							bestSecret.clear();
@@ -574,7 +556,6 @@ public class MyAi implements Ai {
 				}
 			}
 		}
-		System.out.println("about to return");
 		return Objects.requireNonNull(maxNumMove);
 	}
 }
