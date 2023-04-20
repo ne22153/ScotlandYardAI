@@ -9,6 +9,7 @@ import javax.annotation.Nonnull;
 
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.graph.EndpointPair;
 import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
 
@@ -139,13 +140,30 @@ public class MyAi implements Ai {
 											Map<Integer, Integer> destination = new HashMap<>();
 											destination.put(getMoveDestination(move), 0);
 											if (shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state) < minValue) {
-												minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
-												minMove = move;
-												minDestination = destination;
+												if(parentNode.state.getPlayerTickets(det).get().getCount(ScotlandYard.Ticket.TAXI) > 1) {
+													minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
+													minMove = move;
+													minDestination = destination;
+												} else {
+													int counter = 0;
+													// if the detective only has 1 taxi card, then we need to make sure the later moves don't lead to a taxi only location
+													for(Integer endMove : parentNode.state.getSetup().graph.adjacentNodes(getMoveDestination(move))){
+														ImmutableSet<ScotlandYard.Transport> defaultTrans = ImmutableSet.copyOf(new HashSet<>());
+														if(parentNode.state.getSetup().graph.edgeValueOrDefault(getMoveDestination(move), endMove, defaultTrans).stream().allMatch(x -> x.equals(ScotlandYard.Transport.TAXI))){
+															counter += 1;
+														}
+													}
+													// if the end point has only taxi moves, but the detective doesn't have any cards, then it shouldn't be played
+													if(counter != parentNode.state.getSetup().graph.adjacentNodes(getMoveDestination(move)).size()){
+														minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
+														minMove = move;
+														minDestination = destination;
+													}
+												}
 											}
 										}
 										try {
-											if (parentNode.state.advance(move).getWinner().stream().anyMatch(x -> x.isDetective())) {
+											if (parentNode.state.advance(move).getWinner().stream().anyMatch(Piece::isDetective)) {
 												minMove = move;
 												minDestination = new HashMap<>();
 												minDestination.put(getMoveDestination(move), Integer.MIN_VALUE + 1);
@@ -367,9 +385,9 @@ public class MyAi implements Ai {
 							dist.set(count, (dist.get(index) + 1));
 						}
 					}
-					else{
+					/*else{
 						System.out.println("Detective "+detective+" can't use the transport!");
-					}
+					}*/
 				}
 			}
 		}
