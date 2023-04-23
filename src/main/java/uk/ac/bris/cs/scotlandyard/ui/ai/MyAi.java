@@ -4,15 +4,10 @@ import java.util.*;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import javax.annotation.Nonnull;
-
-
 import com.google.common.collect.ImmutableSet;
-import com.google.common.graph.EndpointPair;
 import io.atlassian.fugue.Pair;
 import uk.ac.bris.cs.scotlandyard.model.*;
-
 import static com.google.common.collect.Iterables.size;
 import static java.lang.Math.*;
 
@@ -492,6 +487,7 @@ public class MyAi implements Ai {
 	@Override
 	public void onStart() {
 		Ai.super.onStart();
+		System.out.println("testing");
 	}
 
 	@Override
