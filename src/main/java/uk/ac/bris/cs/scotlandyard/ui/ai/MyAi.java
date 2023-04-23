@@ -210,17 +210,19 @@ public class MyAi implements Ai {
 			Map<Integer, Integer> maxEval = new HashMap<>();
 			maxEval.put(0, Integer.MIN_VALUE);
 			if(!parentNode.children.isEmpty()) for (TreeNode child : parentNode.children) {
-				Integer loc = child.LocationAndScore.keySet().iterator().next();
-				Map<Integer, Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
-				int eval = blah.get(loc);
-				if (maxEval.get(maxEval.keySet().iterator().next()) <= eval) {
-					maxEval.clear();
-					maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
-				}
-				// if the branch you're currently working on gains a value larger than the other branch, then we're done with it, so we can break
-				alpha = max(alpha, eval);
-				if (beta <= alpha) {
-					break;
+				if(!child.state.getAvailableMoves().isEmpty()) {
+					Integer loc = child.LocationAndScore.keySet().iterator().next();
+					Map<Integer, Integer> blah = minimax(child, depth - 1, alpha, beta, false, count);
+					int eval = blah.get(loc);
+					if (maxEval.get(maxEval.keySet().iterator().next()) <= eval) {
+						maxEval.clear();
+						maxEval.put(child.state.getAvailableMoves().iterator().next().source(), eval);
+					}
+					// if the branch you're currently working on gains a value larger than the other branch, then we're done with it, so we can break
+					alpha = max(alpha, eval);
+					if (beta <= alpha) {
+						break;
+					}
 				}
 			}
 			/*if(!parentNode.state.getWinner().isEmpty()){
@@ -565,10 +567,12 @@ public class MyAi implements Ai {
 					Move bestSecretMove = bestSecret.keySet().iterator().next();
 					System.out.println("Choosable secrets: " + choosableSecrets);
 					for (Move move : choosableSecrets.keySet()) {
-						if (getMoveDestination(move) >= getMoveDestination(maxNumMove)) {
-							bestSecret.clear();
-							bestSecret.put(move, choosableSecrets.get(move));
-							bestSecretMove = move;
+						if(move != null) {
+							if (getMoveDestination(move) >= getMoveDestination(maxNumMove)) {
+								bestSecret.clear();
+								bestSecret.put(move, choosableSecrets.get(move));
+								bestSecretMove = move;
+							}
 						}
 					}
 					return Objects.requireNonNull(bestSecretMove);
