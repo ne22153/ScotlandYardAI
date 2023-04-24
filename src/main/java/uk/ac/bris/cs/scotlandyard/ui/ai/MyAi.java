@@ -38,7 +38,7 @@ public class MyAi implements Ai {
 	 * @param currentScore acts as a check to see of the game is over (the node will hold a non-zero value if so)
 	 * @return either the distance to the nearest detective, or the mean of the nearby distances, depending on how close they are
 	 */
-	private Integer stateEvaluation(Board.GameState state, Integer MrXLocation, Map<Integer, Integer> currentScore){
+	public Integer stateEvaluation(Board.GameState state, Integer MrXLocation, Map<Integer, Integer> currentScore){
 
 		// if the game is over in this state, then it is the worst possible result, so the minimum value is returned to lower the chance of it being chosen
 		if(currentScore.get(currentScore.keySet().iterator().next()) == Integer.MIN_VALUE){
@@ -131,13 +131,13 @@ public class MyAi implements Ai {
 
 			if(!groupedMoves.isEmpty()) {
 				parentNode.children.add(new TreeNode(new ArrayList<>(), parentNode.LocationAndScore, parentNode.state));
-
+				TreeNode node = parentNode.children.get(0);
+				Board.GameState minState = node.state;
 				for (Piece det : parentNode.state.getPlayers().stream().filter(Piece::isDetective).toList()) {
 
 					if(parentNode.children.get(0).state.getAvailableMoves().stream().anyMatch((x) -> x.commencedBy().equals(det))) {
-						TreeNode node = parentNode.children.get(0);
+						node = parentNode.children.get(0);
 						int minValue = Integer.MAX_VALUE;
-						Board.GameState minState = node.state;
 						Move minMove = null;
 						Map<Integer, Integer> minDestination = new HashMap<>();
 						groupedMoves = minState.getAvailableMoves().stream().collect(Collectors.groupingBy(Move::commencedBy));
@@ -169,8 +169,8 @@ public class MyAi implements Ai {
 									if (locationCheck == 0) {
 										Map<Integer, Integer> destination = new HashMap<>();
 										destination.put(getMoveDestination(move), 0);
-
-										if (shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state) < minValue) {
+										int dis = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, minState);
+										if (shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, minState) <= minValue) {
 
 											if(parentNode.state.getPlayerTickets(det).get().getCount(ScotlandYard.Ticket.TAXI) > 1) {
 												minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
@@ -182,16 +182,16 @@ public class MyAi implements Ai {
 												int counter = 0;
 
 												// if the detective only has 1 taxi card, then we need to make sure the later moves don't lead to a taxi only location
-												for(Integer endMove : parentNode.state.getSetup().graph.adjacentNodes(getMoveDestination(move))){
+												for(Integer endMove : minState.getSetup().graph.adjacentNodes(getMoveDestination(move))){
 													ImmutableSet<ScotlandYard.Transport> defaultTrans = ImmutableSet.copyOf(new HashSet<>());
 
-													if(parentNode.state.getSetup().graph.edgeValueOrDefault(getMoveDestination(move), endMove, defaultTrans).stream().allMatch(x -> x.equals(ScotlandYard.Transport.TAXI))){
+													if(minState.getSetup().graph.edgeValueOrDefault(getMoveDestination(move), endMove, defaultTrans).stream().allMatch(x -> x.equals(ScotlandYard.Transport.TAXI))){
 														counter += 1;
 													}
 												}
 
 												// if the end point has only taxi moves, but the detective doesn't have any cards, then it shouldn't be played
-												if(counter != parentNode.state.getSetup().graph.adjacentNodes(getMoveDestination(move)).size()){
+												if(counter != minState.getSetup().graph.adjacentNodes(getMoveDestination(move)).size()){
 													minValue = shortestDistance(parentNode.LocationAndScore.keySet().iterator().next(), (Piece.Detective) det, node.state);
 													minMove = move;
 													minDestination = destination;
@@ -212,7 +212,8 @@ public class MyAi implements Ai {
 
 								if (!minDestination.isEmpty()) {
 									try{
-										parentNode.children.set(0, new TreeNode(node.children, minDestination, parentNode.state.advance(minMove)));
+										parentNode.children.set(0, new TreeNode(node.children, minDestination, minState.advance(minMove)));
+										minState = minState.advance(minMove);
 									} catch (Exception ignored){
 									}
 
@@ -227,7 +228,6 @@ public class MyAi implements Ai {
 				}
 			}
 		}
-
 		// for each child, the tree continues to be made
 		for(TreeNode child : parentNode.children){
 			treeMaker(child, child.state, count-1, !MrXTurn);
@@ -241,7 +241,7 @@ public class MyAi implements Ai {
 	 * @param board the gameState of the root node, so the current state of the game
 	 * @return a game tree of depth 4
 	 */
-	private TreeNode treeInitialiser(Board.GameState board){
+	public TreeNode treeInitialiser(Board.GameState board){
 		Map<Integer, Integer> move = new HashMap<>();
 		move.put(board.getAvailableMoves().iterator().next().source(), 0);
 
@@ -260,7 +260,7 @@ public class MyAi implements Ai {
 	 * @param maximisingPlayer defines whether the game seeks to maximise or minimise the score from its children
 	 * @return the value to be assigned to the parentNode's LocationAndScore
 	 */
-	private Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer){
+	public Map<Integer, Integer> minimax (TreeNode parentNode, Integer depth, Integer alpha, Integer beta, boolean maximisingPlayer){
 
 		// if there's no children, the bottom of the tree has been reached, and we should move upward
 		if(parentNode.children.isEmpty()){return parentNode.LocationAndScore;}
@@ -342,7 +342,7 @@ public class MyAi implements Ai {
 	 * @param board the current gameState
 	 * @return whether the given detective has the required tickets for a move
 	 */
-	private boolean ticketmaster(Piece det, ImmutableSet<ScotlandYard.Transport> transport, Board board){
+	public boolean ticketmaster(Piece det, ImmutableSet<ScotlandYard.Transport> transport, Board board){
 		for(ScotlandYard.Transport t : transport){
 			Board.TicketBoard tickets;
 
@@ -362,7 +362,7 @@ public class MyAi implements Ai {
 	 * @param move the move we want to find the destination of
 	 * @return the destination of the given move
 	 */
-	@Nonnull private Integer getMoveDestination(Move move){
+	@Nonnull public Integer getMoveDestination(Move move){
 		return move.accept(new Move.Visitor<>() {
 
 			@Override
@@ -384,7 +384,7 @@ public class MyAi implements Ai {
 	 * @param board the current gameState
 	 * @return the shortest distance between the detective and MrX, based on the available tickets of the detective
 	 */
-	@Nonnull @SuppressWarnings("UnstableApiUsage") private Integer shortestDistance(Integer destination, Piece.Detective detective, Board.GameState board){
+	@Nonnull @SuppressWarnings("UnstableApiUsage") public Integer shortestDistance(Integer destination, Piece.Detective detective, Board.GameState board){
 		int source = 0;
 
 		// get the detective's location
@@ -487,7 +487,6 @@ public class MyAi implements Ai {
 	@Override
 	public void onStart() {
 		Ai.super.onStart();
-		System.out.println("testing");
 	}
 
 	@Override
@@ -502,7 +501,7 @@ public class MyAi implements Ai {
 	 * @return the same moves, now weighted based on how many of the given tickets are available
 	 */
 	@SuppressWarnings("UnstableApiUsage")
-	private Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
+	public Map<Move, Integer> ticketWeighting(Board board, List<Move> destinationMoves){
 		Map<Move,Integer> weightedMove = new HashMap<>();
 
 		for(Move move : destinationMoves){
@@ -586,7 +585,7 @@ public class MyAi implements Ai {
 	 * @param weight the score we're looking for in the tree
 	 * @return the possible locations of MrX's first move that result in the desired score
 	 */
-	private Map<Integer, Integer> treeSearch(TreeNode tree, Integer weight){
+	public Map<Integer, Integer> treeSearch(TreeNode tree, Integer weight){
 		Map<Integer, Integer> nodeFound = new HashMap<>();
 
 		for(TreeNode node: tree.children){
